@@ -1,13 +1,13 @@
 import json
 import os
-import backoff
-
-from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
 from abc import ABC, abstractmethod
-from openai.types.chat import ChatCompletion
 
-from .utils import is_token_limit_error
+import backoff
+from anthropic import AsyncAnthropic
+from logger import get_logger
+from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletion
+from utils import is_token_limit_error
 
 provider_args = {
     "openai": {"api_key": os.getenv("OPENAI_API_KEY")},
@@ -40,6 +40,8 @@ provider_args = {
         "base_url": "https://api.cohere.ai/compatibility/v1/",
     },
 }
+
+llm_logger = get_logger(__name__)
 
 
 class LLM(ABC):
@@ -115,7 +117,7 @@ class GeneralLLM(LLM):
                     if ignore_token_error:
                         raise Exception(f"Token limit error: {str(e)}")
                     if len(messages) > 2:
-                        print(
+                        llm_logger.warning(
                             f"Too long, removing oldest message pair. {len(messages)}"
                         )
                         messages.pop(1)

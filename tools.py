@@ -1,16 +1,15 @@
 import json
-import backoff
-import aiohttp
-import re
 import os
-
+import re
 from abc import ABC, abstractmethod
-from bs4 import BeautifulSoup
-from openai.types.chat import ChatCompletionMessageToolCall
-from anthropic.types.tool_use_block import ToolUseBlock
 
-from .llm import GeneralLLM
-from .logger import get_logger
+import aiohttp
+import backoff
+from anthropic.types.tool_use_block import ToolUseBlock
+from bs4 import BeautifulSoup
+from llm import GeneralLLM
+from logger import get_logger
+from openai.types.chat import ChatCompletionMessageToolCall
 
 tool_logger = get_logger(__name__)
 
@@ -22,7 +21,7 @@ def is_429(exception):
         or "429" in str(exception)
     )
     if is429:
-        print(f"429 error: {exception}")
+        tool_logger.error(f"429 error: {exception}")
     return is429
 
 
@@ -166,7 +165,7 @@ class GoogleWebSearch(Tool):
     def __init__(
         self,
         top_n_results: int = 10,
-        serpapi_api_key: str = os.getenv("SERPAPI_API_KEY"),
+        serpapi_api_key: str = os.getenv("SERP_API_KEY"),
         *args,
         **kwargs,
     ):
@@ -180,6 +179,9 @@ class GoogleWebSearch(Tool):
         )
         self.top_n_results = top_n_results
         self.serpapi_api_key = serpapi_api_key
+
+        if serpapi_api_key is None:
+            raise Exception("SERP_API_KEY is not set")
 
     @retry_on_429
     async def _execute_search(self, search_query: str) -> list[str]:
@@ -266,7 +268,7 @@ class EDGARSearch(Tool):
 
     def __init__(
         self,
-        sec_api_key: str = os.getenv("SEC_EDGAR_API_KEY"),
+        sec_api_key: str = os.getenv("SEC_API_KEY"),
         *args,
         **kwargs,
     ):
@@ -275,8 +277,10 @@ class EDGARSearch(Tool):
             **kwargs,
         )
         self.sec_api_key = sec_api_key
-        print
         self.sec_api_url = "https://api.sec-api.io/full-text-search"
+
+        if sec_api_key is None:
+            raise Exception("SEC_API_KEY is not set")
 
     @retry_on_429
     async def _execute_search(

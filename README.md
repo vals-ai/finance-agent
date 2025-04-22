@@ -7,6 +7,7 @@ This repo contains the codebase to run the agent that was used to create the ben
 ## Overview
 
 This agent connects to various data sources including:
+
 - SEC EDGAR database
 - Google web search
 - HTML page parsing capabilities
@@ -18,47 +19,12 @@ For all models except Anthropic's, we use OpenAI SDK for the agent.
 ## Installation
 
 Run the following command to install the enviromnent:
+
 ```
 pip install -r requirements.txt
 ```
 
-## Configuration
-
-The agent is configured using the `run_config.yaml` file. Here's an explanation of the key parameters:
-
-```yaml
-# The LLM provider and model to use
-model_id: google/gemini-2.5-pro-exp-03-25
-
-# The benchmark suite ID to run (if using vals benchmarking)
-suite_id: edgar_research_final_review
-
-# Agent parameters
-agent_parameters:
-  # Maximum number of interaction turns before stopping
-  max_turns: 50
-
-  # Tools available to the agent
-  available_tools:
-    - google_web_search
-    - retrieve_information
-    - parse_html_page
-    - edgar_search
-
-# Parameters for benchmark runs
-run_parameters:
-  parallelism: 10
-```
-
-### Configuration Options
-
-- **model_id**: Specifies the provider and model name in the format `provider/model_name`
-  - Supported providers: openai, anthropic, google, mistralai, together, fireworks, grok
-  - Examples: openai/gpt-4, anthropic/claude-3-7-sonnet-20250219, google/gemini-2.5-pro
-
-- **agent_parameters**:
-  - **max_turns**: Maximum number of tool-use iterations before the agent terminates
-  - **available_tools**: List of tools the agent can use (must be defined in tool.py)
+We recommend creating and using a Conda environment for this. For detailed instructions on managing Conda environments, see the [official Conda documentation](https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html).
 
 ## Environment Setup
 
@@ -66,26 +32,55 @@ Create a `.env` file with the necessary API keys:
 
 ```
 # LLM API Keys
+# Note: It's only necessary to set the API keys for the models you plan on using
 OPENAI_API_KEY=your_openai_key
 ANTHROPIC_API_KEY=your_anthropic_key
 GOOGLE_API_KEY=your_google_key
 MISTRAL_API_KEY=your_mistral_key
-# ...other provider keys as needed
+TOGETHER_API_KEY=your_together_api_key
+FIREWORKS_API_KEY=your_fireworks_api_key
+
 
 # Tool API Keys
-SERPAPI_API_KEY=your_serpapi_key
+SERP_API_KEY=your_serpapi_key
 SEC_API_KEY=your_sec_api_key
 ```
 
+You can create a SERP API key [here](https://serpapi.com/), and an SEC API key [here](https://sec-api.io/).
+
 ## Running the Agent
 
-To expeiment with the agent, simply configure the question(s), model and parameters you want to test in `run_agent.py` and then run the following command:
+To experiment with the agent, you can run the following command:
 
-```
-python -m edgar-finance-agent.run_agent
+```bash
+python run_agent.py --questions "What was Apple's revenue in 2023?"
 ```
 
-For more details parameters, please look at `get_agent.py`. The default configuration is the one we used to run the benchmark.
+You can specify multiple questions at once:
+
+```bash
+python run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
+```
+
+To specify a specific model, use the `--model` flag:
+
+```bash
+python run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-4o
+```
+
+You can also specify a list of questions in a text file, one question per line, with the following command:
+
+```bash
+python run_agent.py --question-file my_questions.txt
+```
+
+For a full list of parameters, please run:
+
+```bash
+python run_agent.py --help
+```
+
+The default configuration is the one we used to run the benchmark.
 
 ## Available Tools
 
@@ -94,9 +89,39 @@ For more details parameters, please look at `get_agent.py`. The default configur
 - `parse_html_page`: Parse and extract content from web pages
 - `retrieve_information`: Access stored information from previous steps
 
+## Available Models
+
+The following models are supported by this repo:
+
+```
+- openai/gpt-4o-2024-08-06
+- openai/gpt-4o-mini-2024-07-18
+- openai/o3-mini-2025-01-31
+- openai/o1-2024-12-17
+- anthropic/claude-3-5-haiku-20241022
+- anthropic/claude-3-7-sonnet-20250219
+- anthropic/claude-3-7-sonnet-20250219-thinking
+- google/gemini-2.0-flash-001
+- google/gemini-2.5-pro-preview-03-25
+- together/meta-llama/Llama-3.3-70B-Instruct-Turbo
+- together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+- together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+- mistralai/mistral-small-2503
+- grok/grok-3-beta
+- grok/grok-3-mini-fast-beta-high-reasoning
+- grok/grok-3-mini-fast-beta-low-reasoning
+- cohere/command-a-03-2025
+- openai/gpt-4.1-mini-2025-04-14
+- openai/gpt-4.1-nano-2025-04-14
+- openai/gpt-4.1-2025-04-14
+- openai/o4-mini-2025-04-16
+- openai/o3-2025-04-16
+```
+
 ## Logs and Output
 
 The agent writes detailed logs to the `logs` directory, including:
+
 - Session-specific logs with timestamps
 - Tool usage statistics
 - Token usage

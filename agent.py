@@ -1,14 +1,14 @@
-import os
-import uuid
 import json
-from datetime import datetime
-from abc import ABC
+import os
 import re
+import uuid
+from abc import ABC
+from datetime import datetime
 
-from .tool import Tool
-from .llm import GeneralLLM
-from .logger import get_logger
-from .utils import INSTRUCTIONS_PROMPT, _merge_statistics
+from llm import GeneralLLM
+from logger import get_logger
+from tools import Tool
+from utils import INSTRUCTIONS_PROMPT, merge_statistics
 
 agent_logger = get_logger(__name__)
 
@@ -341,7 +341,7 @@ class Agent(ABC):
             metadata["final_answer"] = final_answer
 
         # Merge turn-level statistics into session-level statistics
-        metadata = _merge_statistics(metadata)
+        metadata = merge_statistics(metadata)
 
         # Create logs directory if it doesn't exist
         os.makedirs("logs", exist_ok=True)

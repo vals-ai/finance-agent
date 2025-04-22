@@ -7,3 +7,8 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 google-search-results==2.4.2  # for serpapi
 sec-api==1.0.29
+
+
+# Other
+backoff==2.2.1
+aiohttp==3.11.18
