@@ -39,7 +39,8 @@ GOOGLE_API_KEY=your_google_key
 MISTRAL_API_KEY=your_mistral_key
 TOGETHER_API_KEY=your_together_api_key
 FIREWORKS_API_KEY=your_fireworks_api_key
-
+GROK_API_KEY=your_grok_api_key
+COHERE_API_KEY=cohere_api_key
 
 # Tool API Keys
 SERP_API_KEY=your_serpapi_key

@@ -19,7 +19,7 @@ Question:
 """
 
 
-def _merge_statistics(metadata: dict) -> dict:
+def merge_statistics(metadata: dict) -> dict:
     """
     Merge turn-level statistics into session-level statistics.
 
