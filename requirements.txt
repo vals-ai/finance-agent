@@ -1,6 +1,5 @@
-# LLM clients
-openai==1.61.0
-anthropic==0.47.0
+# Model library 
+model-library>=0.1.2
 
 # Web tools
 requests==2.32.3

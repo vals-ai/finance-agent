@@ -5,21 +5,24 @@ import os
 from datetime import datetime
 
 from agent import agent_logger
-from get_agent import get_agent
+from get_agent import get_agent, Parameters
 from tools import tool_logger
 from tqdm.asyncio import tqdm
+from model_library.base import LLMConfig
+from dotenv import load_dotenv
+
+from typing import Any
 
 
 async def run_tests_parallel(
-    output_dir,
-    questions=[],
-    model_name="anthropic/claude-3-7-sonnet-20250219",
-    max_concurrent=5,
-    save_results=False,
-    parameters={},
-):
+    output_dir: str,
+    questions: list[str],
+    max_concurrent: int,
+    save_results: bool,
+    parameters: Parameters,
+) -> list[dict[str, Any]]:
     """Run multiple questions in parallel using the custom model"""
-    agent = await get_agent(model_name, parameters)
+    agent = await get_agent(parameters)
 
     semaphore = asyncio.Semaphore(max_concurrent)
 
@@ -59,7 +62,7 @@ def main():
     parser.add_argument(
         "--max-output-tokens",
         type=int,
-        default=8192,
+        default=32000,
         help="Maximum number of output tokens for completion generation",
     )
     parser.add_argument(
@@ -81,7 +84,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="anthropic/claude-3-7-sonnet-20250219",
+        default="anthropic/claude-sonnet-4-5-20250929",
         help="Model to use to generate completions",
     )
     parser.add_argument(
@@ -127,7 +130,8 @@ def main():
     )
     args = parser.parse_args()
 
-    # Set logging level
+    load_dotenv()
+
     logging_level = args.log_level
     tool_logger.setLevel(logging_level)
     agent_logger.setLevel(logging_level)
@@ -143,12 +147,15 @@ def main():
             "No questions provided. One of --question-file or --questions must be used."
         )
 
-    parameters = {
-        "max_output_tokens": args.max_output_tokens,
-        "temperature": args.temperature,
-        "max_turns": args.max_turns,
-        "tools": args.tools,
-    }
+    parameters = Parameters(
+        model_name=args.model,
+        max_turns=args.max_turns,
+        tools=args.tools,
+        llm_config=LLMConfig(
+            max_output_tokens=args.max_output_tokens,
+            temperature=args.temperature,
+        ),
+    )
 
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir, exist_ok=True)
@@ -157,7 +164,6 @@ def main():
         run_tests_parallel(
             output_dir=args.results_dir,
             questions=questions,
-            model_name=args.model,
             max_concurrent=args.parallelism,
             save_results=True,
             parameters=parameters,

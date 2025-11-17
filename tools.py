@@ -1,17 +1,20 @@
 import json
 import os
 import re
+import traceback
 from abc import ABC, abstractmethod
 
 import aiohttp
 import backoff
-from anthropic.types.tool_use_block import ToolUseBlock
 from bs4 import BeautifulSoup
-from llm import GeneralLLM
+
+from model_library.base import LLM, ToolBody, ToolDefinition
+
 from logger import get_logger
-from openai.types.chat import ChatCompletionMessageToolCall
 
 tool_logger = get_logger(__name__)
+
+MAX_END_DATE = "2025-04-07"
 
 
 def is_429(exception):
@@ -59,68 +62,17 @@ class Tool(ABC):
     ):
         super().__init__()
 
-    def parse_tool_message(
-        self,
-        provider="openai",
-        message: str | ChatCompletionMessageToolCall | ToolUseBlock = None,
-    ):
-        """
-        Get the tool format for different providers.
+    def get_tool_definition(self) -> ToolDefinition:
+        body = ToolBody(
+            name=self.name,
+            description=self.description,
+            properties=self.input_arguments,
+            required=self.required_arguments,
+        )
 
-        Args:
-            provider (str): The provider to format the tool for ('openai' or 'anthropic')
+        definition = ToolDefinition(name=self.name, body=body)
 
-        Returns:
-            dict: Formatted tool definition
-        """
-        if provider.lower() != "anthropic":
-            arguments = message.function.arguments
-        elif provider.lower() == "anthropic":
-            arguments = message.input
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
-
-        return arguments
-
-    def get_tool_json(self, provider: str = "openai", strict: bool = True) -> dict:
-        if provider.lower() == "anthropic":
-            return {
-                "name": self.name,
-                "description": self.description,
-                "input_schema": {
-                    "type": "object",
-                    "properties": self.input_arguments,
-                    "required": self.required_arguments,
-                },
-            }
-        elif provider.lower() == "mistralai":
-            return {
-                "type": "function",
-                "function": {
-                    "name": self.name,
-                    "description": self.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": self.input_arguments,
-                        "required": self.required_arguments,
-                    },
-                },
-            }
-        else:
-            return {
-                "type": "function",
-                "function": {
-                    "name": self.name,
-                    "description": self.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": self.input_arguments,
-                        "required": self.required_arguments,
-                        "additionalProperties": False,
-                    },
-                    "strict": strict,
-                },
-            }
+        return definition
 
     @abstractmethod
     def call_tool(self, arguments: dict, *args, **kwargs) -> list[str]:
@@ -128,7 +80,7 @@ class Tool(ABC):
 
     async def __call__(self, arguments: dict = None, *args, **kwargs) -> list[str]:
         tool_logger.info(
-            f"\033[1;34m[TOOL: {self.name.upper()}]\033[0m Calling with arguments: {arguments}"
+            f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments: {arguments}"
         )
 
         try:
@@ -145,10 +97,18 @@ class Tool(ABC):
             else:
                 return {"success": True, "result": json.dumps(tool_result)}
         except Exception as e:
-            tool_logger.error(
-                f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}"
-            )
-            return {"success": False, "result": str(e)}
+            is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
+            error_msg = str(e)
+            if is_verbose:
+                error_msg += f"\nTraceback: {traceback.format_exc()}"
+                tool_logger.warning(
+                    f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}\nTraceback: {traceback.format_exc()}"
+                )
+            else:
+                tool_logger.warning(
+                    f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}"
+                )
+            return {"success": False, "result": error_msg}
 
 
 class GoogleWebSearch(Tool):
@@ -165,7 +125,7 @@ class GoogleWebSearch(Tool):
     def __init__(
         self,
         top_n_results: int = 10,
-        serpapi_api_key: str = os.getenv("SERP_API_KEY"),
+        serpapi_api_key: str | None = None,
         *args,
         **kwargs,
     ):
@@ -178,10 +138,9 @@ class GoogleWebSearch(Tool):
             **kwargs,
         )
         self.top_n_results = top_n_results
-        self.serpapi_api_key = serpapi_api_key
-
         if serpapi_api_key is None:
-            raise Exception("SERP_API_KEY is not set")
+            serpapi_api_key = os.getenv("SERP_API_KEY")
+        self.serpapi_api_key = serpapi_api_key
 
     @retry_on_429
     async def _execute_search(self, search_query: str) -> list[str]:
@@ -194,11 +153,16 @@ class GoogleWebSearch(Tool):
         Returns:
             list[str]: A list of results from Google Search
         """
+        if not self.serpapi_api_key:
+            raise ValueError("SERPAPI_API_KEY is not set")
+
         params = {
             "api_key": self.serpapi_api_key,
             "engine": "google",
             "q": search_query,
             "num": self.top_n_results,
+            # Hardcode date limit to April 7, 2025
+            "tbs": "cdr:1,cd_max:04/07/2025",
         }
 
         async with aiohttp.ClientSession() as session:
@@ -268,7 +232,7 @@ class EDGARSearch(Tool):
 
     def __init__(
         self,
-        sec_api_key: str = os.getenv("SEC_API_KEY"),
+        sec_api_key: str | None = None,
         *args,
         **kwargs,
     ):
@@ -276,11 +240,10 @@ class EDGARSearch(Tool):
             *args,
             **kwargs,
         )
+        if sec_api_key is None:
+            sec_api_key = os.getenv("SEC_EDGAR_API_KEY")
         self.sec_api_key = sec_api_key
         self.sec_api_url = "https://api.sec-api.io/full-text-search"
-
-        if sec_api_key is None:
-            raise Exception("SEC_API_KEY is not set")
 
     @retry_on_429
     async def _execute_search(
@@ -308,6 +271,10 @@ class EDGARSearch(Tool):
         Returns:
             list[str]: A list of filing results
         """
+
+        if not self.sec_api_key:
+            raise ValueError("SEC_EDGAR_API_KEY is not set")
+
         # Parse form_types if it's a string representation of a JSON array
         if (
             isinstance(form_types, str)
@@ -330,12 +297,15 @@ class EDGARSearch(Tool):
                 # Fallback to simple parsing if JSON parsing fails
                 ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]
 
+        if end_date > MAX_END_DATE:
+            end_date = MAX_END_DATE
+
         payload = {
             "query": query,
             "formTypes": form_types,
             "ciks": ciks,
             "startDate": start_date,
-            "endDate": end_date,
+            "endDate": end_date,  # This will always be at most "2025-04-07"
             "page": page,
         }
 
@@ -357,7 +327,13 @@ class EDGARSearch(Tool):
         try:
             return await self._execute_search(**arguments)
         except Exception as e:
-            tool_logger.error(f"SEC API error: {e}")
+            is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
+            if is_verbose:
+                tool_logger.error(
+                    f"SEC API error: {e}\nTraceback: {traceback.format_exc()}"
+                )
+            else:
+                tool_logger.error(f"SEC API error: {e}")
             raise
 
 
@@ -413,7 +389,13 @@ class ParseHtmlPage(Tool):
                         "Timeout error when parsing HTML page after 60 seconds. The URL might be blocked or the server is taking too long to respond."
                     )
                 else:
-                    raise e
+                    is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
+                    if is_verbose:
+                        raise Exception(
+                            str(e) + "\nTraceback: " + traceback.format_exc()
+                        )
+                    else:
+                        raise Exception(str(e))
 
         soup = BeautifulSoup(html_content, "html.parser")
 
@@ -486,19 +468,19 @@ class RetrieveInformation(Tool):
     description: str = (
         """
     Retrieve information from the conversation's data structure (dict) and allow character range extraction.
-    
+
     IMPORTANT: Your prompt MUST include at least one key from the data storage using the exact format: {{key_name}}
-    
+
     For example, if you want to analyze data stored under the key "financial_report", your prompt should look like:
     "Analyze the following financial report and extract the revenue figures: {{financial_report}}"
-    
+
     The {{key_name}} will be replaced with the actual content stored under that key before being sent to the LLM.
     If you don't use this exact format with double braces, the tool will fail to retrieve the information.
-    
+
     You can optionally specify character ranges for each document key to extract only portions of documents. That can be useful to avoid token limit errors or improve efficiency by selecting only part of the document.
     For example, if "financial_report" contains "Annual Report 2023" and you specify a range [1, 5] for that key,
     only "nnual" will be inserted into the prompt.
-    
+
     The output is the result from the LLM that receives the prompt with the inserted data.
     """.strip()
     )
@@ -508,13 +490,20 @@ class RetrieveInformation(Tool):
             "description": "The prompt that will be passed to the LLM. You MUST include at least one data storage key in the format {{key_name}} - for example: 'Summarize this 10-K filing: {{company_10k}}'. The content stored under each key will replace the {{key_name}} placeholder.",
         },
         "input_character_ranges": {
-            "type": "object",
-            "description": "A dictionary mapping document keys to their character ranges. Each range should be an array where the first element is the start index and the second element is the end index. Can be used to only read portions of documents. By default, the full document is used. To use the full document, set the range to an empty list [].",
-            "additionalProperties": {
-                "type": "array",
-                "items": {
-                    "type": "integer",
+            "type": "array",
+            "description": "An array mapping document keys to their character ranges. Each range should be an array where the first element is the start index and the second element is the end index. Can be used to only read portions of documents. By default, the full document is used. To use the full document, set the range to an empty list [].",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string"},
+                    "range": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "minItems": 0,
+                        "maxItems": 2,
+                    },
                 },
+                "required": ["key", "range"],
             },
         },
     }
@@ -527,12 +516,16 @@ class RetrieveInformation(Tool):
         )
 
     async def call_tool(
-        self, arguments: dict, data_storage: dict, model: GeneralLLM, *args, **kwargs
+        self, arguments: dict, data_storage: dict, model: LLM, *args, **kwargs
     ) -> list[str]:
         prompt: str = arguments.get("prompt")
-        input_character_ranges = arguments.get("input_character_ranges", {})
+        input_character_ranges = arguments.get("input_character_ranges", [])
         if input_character_ranges is None:
-            input_character_ranges = {}
+            input_character_ranges = []
+
+        input_character_ranges = {
+            item["key"]: item["range"] for item in input_character_ranges
+        }
 
         # Verify that the prompt contains at least one placeholder in the correct format
         if not re.search(r"{{[^{}]+}}", prompt):
@@ -577,17 +570,12 @@ class RetrieveInformation(Tool):
             prompt = formatted_prompt.format(**formatted_data)
         except KeyError as e:
             raise KeyError(
-                f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
+                f"ERROR: The key {e} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
 
-        model_response = await model.safe_chat(
-            messages=[
-                {"role": "user", "content": prompt},
-            ],
-            ignore_token_error=True,
-        )
+        response = await model.query(prompt)
 
         return {
-            "retrieval": model.parse_response(model_response),
-            "usage": model.convert_usage(model_response.usage),
+            "retrieval": response.output_text_str,
+            "usage": response.metadata.model_dump(),
         }

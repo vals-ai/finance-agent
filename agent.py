@@ -1,23 +1,41 @@
 import json
 import os
 import re
+import traceback
 import uuid
 from abc import ABC
 from datetime import datetime
+from collections import defaultdict
 
-from llm import GeneralLLM
+from model_library.base import (
+    LLM,
+    ToolCall,
+    ToolResult,
+    QueryResult,
+    InputItem,
+    TextInput,
+)
+
 from logger import get_logger
 from tools import Tool
-from utils import INSTRUCTIONS_PROMPT, merge_statistics
+from utils import INSTRUCTIONS_PROMPT, _merge_statistics, TOKEN_KEYS
 
 agent_logger = get_logger(__name__)
+
+
+class ModelException(Exception):
+    """
+    Raised on model errors - not retried by default
+    """
+
+    pass
 
 
 class Agent(ABC):
     def __init__(
         self,
         tools: dict[str, Tool],
-        llm: GeneralLLM,
+        llm: LLM,
         max_turns: int = 20,
         instructions_prompt: str = INSTRUCTIONS_PROMPT,
     ):
@@ -26,241 +44,188 @@ class Agent(ABC):
         self.max_turns = max_turns
         self.instructions_prompt = instructions_prompt
 
-    def get_tool_definitions(self) -> list[str]:
-        tool_definitions = []
-        for name, tool in self.tools.items():
-            if hasattr(tool, "get_tool_json"):
-                tool_definitions.append(
-                    tool.get_tool_json(
-                        provider=self.llm.provider,
-                        strict=not "grok" in self.llm.model_name
-                        and not "deepseek" in self.llm.model_name,
-                    )
-                )
-        return tool_definitions
+    async def _find_final_answer(self, response_text: str) -> str:
+        """
+        Search through the response text for the presence of 'FINAL ANSWER:', and if its present,
+        extract the answer and any sources
+        """
+        final_answer_pattern = re.compile(r"FINAL ANSWER:", re.IGNORECASE)
 
-    async def _process_turn(self, messages, turn_count, data_storage, metadata):
+        if isinstance(response_text, str) and final_answer_pattern.search(
+            response_text
+        ):
+            final_answer_match = re.search(
+                r"FINAL ANSWER:(.*?)(?:\{\"sources\"|\Z)",
+                response_text,
+                re.DOTALL,
+            )
+            sources_match = re.search(r"(\{\"sources\".*\})", response_text, re.DOTALL)
+
+            answer_text = (
+                final_answer_match.group(1).strip() if final_answer_match else ""
+            )
+
+            sources_text = sources_match.group(1) if sources_match else ""
+
+            final_answer = answer_text
+            if sources_text:
+                final_answer = f"{answer_text}\n\n{sources_text}"
+
+            agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
+            return final_answer
+
+        return None
+
+    async def _process_tool_calls(
+        self, tool_calls: list[ToolCall], data_storage: dict, turn_metadata: dict
+    ):
+        """
+        Helper method to process tool calls, handling errors, validating arguments,
+        and generating the results.
+        """
+
+        tool_results: list[ToolResult] = []
+        tool_call_metadatas: list[dict] = []
+        errors: list[str] = []
+
+        for tool_call in tool_calls:
+            tool_name = tool_call.name
+
+            # unpacks tool call arguments
+            arguments = tool_call.args
+            tool_call_metadata = {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "success": False,
+                "error": None,
+            }
+
+            # Validate tool_name exists
+            if tool_name not in self.tools:
+                error_msg = f"Tool '{tool_name}' not found. Available tools: {list(self.tools.keys())}"
+
+                tool_call_metadata["error"] = error_msg
+                tool_call_metadatas.append(tool_call_metadata)
+                turn_metadata["errors"].append(error_msg)
+
+                tool_result = ToolResult(tool_call=tool_call, result=error_msg)
+                tool_results.append(tool_result)
+                continue
+
+            # Validate tool arguments are JSON-parseable
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    error_msg = f"Tool call arguments were not valid json: {arguments}"
+
+                    tool_call_metadata["error"] = error_msg
+                    tool_call_metadatas.append(tool_call_metadata)
+                    errors.append(error_msg)
+
+                    tool_result = ToolResult(tool_call=tool_call, result=error_msg)
+                    tool_results.append(tool_result)
+                    continue
+
+            # Call tools with appropriate arguments
+            if tool_name == "retrieve_information":
+                raw_tool_result = await self.tools[tool_name](
+                    arguments, data_storage, self.llm
+                )
+                if "usage" in raw_tool_result:
+                    # Retrieval can use LLM tokens too, so we need to track them here
+                    tool_token_usage = raw_tool_result["usage"]
+                    for key in TOKEN_KEYS:
+                        turn_metadata["retrieval_metadata"][key] += (
+                            tool_token_usage.get(key, 0) or 0
+                        )
+
+            elif tool_name == "parse_html_page":
+                raw_tool_result = await self.tools[tool_name](arguments, data_storage)
+            else:
+                raw_tool_result = await self.tools[tool_name](arguments)
+
+            if raw_tool_result["success"]:
+                # Add tool result to messages
+                tool_call_metadata["success"] = True
+            else:
+                tool_call_metadata["error"] = raw_tool_result["result"]
+                errors.append(raw_tool_result["result"])
+
+            tool_result = ToolResult(
+                tool_call=tool_call, result=raw_tool_result["result"]
+            )
+            tool_results.append(tool_result)
+
+            tool_call_metadatas.append(tool_call_metadata)
+
+        turn_metadata["tool_calls"].extend(tool_call_metadatas)
+
+        return tool_results
+
+    async def _process_turn(self, turn_count, data_storage):
         """
         Process a single turn in the agent's conversation.
 
         Args:
-            messages (list): The conversation history
             turn_count (int): The current turn number
             data_storage (dict): Storage for conversation data
-            metadata (dict): Session metadata
 
         Returns:
             tuple: (final_answer, turn_metadata, should_continue)
         """
         agent_logger.info(f"\033[1;34m[TURN {turn_count}]\033[0m")
 
-        # Initialize turn metadata
-        turn_start_time = datetime.now()
-        turn_metadata = {
-            "turn_id": turn_count,
-            "start_time": turn_start_time.isoformat(),
-            "end_time": None,
-            "duration_seconds": None,
-            "tokens": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-            "tokens_retrieval": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-            "tool_calls": [],
-            "errors": [],
-        }
-
-        # Get response from LLM
-        response = await self.llm.safe_chat(
-            messages=messages, tools=self.get_tool_definitions()
+        tool_definitions = [tool.get_tool_definition() for tool in self.tools.values()]
+        agent_logger.info(
+            f"\033[1;35m[TOOLS AVAILABLE]\033[0m {[tool.name for tool in tool_definitions]}"
         )
 
-        # Update token usage if available in response
-        if hasattr(response, "usage"):
-            converted_usage = self.llm.convert_usage(response.usage)
-            turn_metadata["tokens"]["prompt_tokens"] = converted_usage["prompt_tokens"]
-            turn_metadata["tokens"]["completion_tokens"] = converted_usage[
-                "completion_tokens"
-            ]
-            turn_metadata["tokens"]["total_tokens"] = converted_usage["total_tokens"]
+        try:
+            response: QueryResult = await self.llm.query(
+                input=self.messages, tools=tool_definitions
+            )
+        except Exception as e:
+            agent_logger.critical(f"Error: {e}")
+            agent_logger.critical(f"Traceback: {traceback.format_exc()}")
+            raise ModelException(e)
 
-        if self.llm.provider != "anthropic":
-            if response is None or response.choices is None:
-                agent_logger.error(
-                    f"\033[1;31m[LLM STOPPED]\033[0m the agent stopped the conversation before reaching the maximum number of turns or a FINAL ANSWER was found."
-                )
-                return None, turn_metadata, False
-            if (
-                response.choices[0].message.content is None
-                and response.choices[0].message.tool_calls is None
-            ):
-                agent_logger.error(
-                    f"\033[1;31m[LLM STOPPED]\033[0m the agent stopped the conversation before reaching the maximum number of turns or a FINAL ANSWER was found."
-                )
-                return None, turn_metadata, False
+        self.messages = response.history
 
-            if response.choices[0].message.content is not None:
-                agent_logger.info(
-                    f"\033[1;33m[LLM THINKING]\033[0m {response.choices[0].message.content}"
-                )
+        response_text = response.output_text
+        reasoning_text = response.reasoning
+        tool_calls: list[ToolCall] = response.tool_calls
 
-            if (
-                "command-a" in self.llm.model_name
-                and response.choices[0].message.content is None
-            ):
-                response.choices[0].message.content = ""
+        agent_logger.info(
+            f"\033[1;36m[TOOL CALLS RECEIVED]\033[0m {len(tool_calls)} tool calls: {[tc.name for tc in tool_calls]}"
+        )
 
-            messages.append(response.choices[0].message)
+        turn_metadata = {
+            "tool_calls": [],
+            "errors": [],
+            "retrieval_metadata": defaultdict(int),
+            "query_metadata": response.metadata.model_dump(),
+        }
 
-        elif self.llm.provider == "anthropic":
-            if response.content is None:
-                agent_logger.error(
-                    f"\033[1;31m[LLM STOPPED]\033[0m the agent stopped the conversation before reaching the maximum number of turns or a FINAL ANSWER was found."
-                )
-                return None, turn_metadata, False
+        # Log the thinking content if available
+        if reasoning_text:
+            agent_logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
 
-            if response.content and len(response.content) > 0:
-                for block in response.content:
-                    if block.type == "text" and block.text:
-                        agent_logger.info(
-                            f"\033[1;33m[LLM THINKING]\033[0m {block.text}"
-                        )
-
-            # Convert Anthropic response to a message format compatible with the conversation
-            message = {
-                "role": "assistant",
-                "content": response.content,
-            }
-            messages.append(message)
-
-        # Extract tool calls
-        tool_calls = self.llm.get_tool_calls(response)
+        if response_text:
+            agent_logger.info(f"\033[1;33m[LLM RESPONSE]\033[0m {response_text}")
 
         if tool_calls:
-            for tool_call in tool_calls:
-                tool_name = tool_call["name"]
-                arguments = tool_call["arguments"]
-                tool_content = tool_call["tool_content"]
-
-                # Track tool call in turn metadata
-                tool_call_metadata = {
-                    "tool_name": tool_name,
-                    "arguments": arguments,
-                    "success": False,
-                    "error": None,
-                }
-
-                if tool_name not in self.tools:
-                    error_msg = f"Tool '{tool_name}' not found. Available tools: {list(self.tools.keys())}"
-
-                    # Update error tracking
-                    tool_call_metadata["error"] = error_msg
-                    turn_metadata["errors"].append(error_msg)
-
-                    # Add error to messages
-                    self.llm.append_tool_result(messages, tool_content, error_msg)
-                    continue
-
-                # Handle different tool calling patterns
-                if tool_name == "retrieve_information":
-                    tool_result = await self.tools[tool_name](
-                        arguments, data_storage, self.llm
-                    )
-                    if "usage" in tool_result:
-                        tool_token_usage = tool_result["usage"]
-                        turn_metadata["tokens"]["prompt_tokens"] += tool_token_usage[
-                            "prompt_tokens"
-                        ]
-                        turn_metadata["tokens"][
-                            "completion_tokens"
-                        ] += tool_token_usage["completion_tokens"]
-                        turn_metadata["tokens"]["total_tokens"] += tool_token_usage[
-                            "total_tokens"
-                        ]
-                        turn_metadata["tokens_retrieval"][
-                            "prompt_tokens"
-                        ] += tool_token_usage["prompt_tokens"]
-                        turn_metadata["tokens_retrieval"][
-                            "completion_tokens"
-                        ] += tool_token_usage["completion_tokens"]
-                        turn_metadata["tokens_retrieval"][
-                            "total_tokens"
-                        ] += tool_token_usage["total_tokens"]
-                elif tool_name == "parse_html_page":
-                    tool_result = await self.tools[tool_name](arguments, data_storage)
-                else:
-                    tool_result = await self.tools[tool_name](arguments)
-
-                if tool_result["success"]:
-                    # Add tool result to messages
-                    tool_call_metadata["success"] = True
-                else:
-                    tool_call_metadata["error"] = tool_result["result"]
-                    turn_metadata["errors"].append(tool_result["result"])
-
-                self.llm.append_tool_result(
-                    messages, tool_content, tool_result["result"]
-                )
-
-                # Add tool call metadata to turn
-                turn_metadata["tool_calls"].append(tool_call_metadata)
+            tool_results = await self._process_tool_calls(
+                tool_calls, data_storage, turn_metadata
+            )
+            self.messages.extend(tool_results)
 
         else:
-            # Get text response when there are no tool calls
-            response_text = self.llm.parse_response(response)
+            # Look for the text "FINAL ANSWER:" in the response text
+            final_answer = await self._find_final_answer(response_text)
 
-            # Use regex to check for "FINAL ANSWER:" pattern
-            final_answer_pattern = re.compile(r"FINAL ANSWER:", re.IGNORECASE)
-
-            if isinstance(response_text, str) and final_answer_pattern.search(
-                response_text
-            ):
-                # Use regex to extract the content after "FINAL ANSWER:"
-                final_answer_match = re.search(
-                    r"FINAL ANSWER:(.*?)(?:\{\"sources\"|\Z)",
-                    response_text,
-                    re.DOTALL,
-                )
-                sources_match = re.search(
-                    r"(\{\"sources\".*\})", response_text, re.DOTALL
-                )
-
-                answer_text = (
-                    final_answer_match.group(1).strip() if final_answer_match else ""
-                )
-
-                # Extract sources if available
-                sources_text = sources_match.group(1) if sources_match else ""
-
-                # Combine answer and sources
-                final_answer = answer_text
-                if sources_text:
-                    final_answer = f"{answer_text}\n\n{sources_text}"
-
-                agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
-
-                # Finalize turn metadata
-                turn_end_time = datetime.now()
-                turn_metadata["end_time"] = turn_end_time.isoformat()
-                turn_metadata["duration_seconds"] = (
-                    turn_end_time - turn_start_time
-                ).total_seconds()
-
+            if final_answer:
                 return final_answer, turn_metadata, False
-            else:
-                agent_logger.info(f"\033[1;33m[LLM THINKING]\033[0m {response_text}")
-
-        # Finalize turn metadata
-        turn_end_time = datetime.now()
-        turn_metadata["end_time"] = turn_end_time.isoformat()
-        turn_metadata["duration_seconds"] = (
-            turn_end_time - turn_start_time
-        ).total_seconds()
 
         return None, turn_metadata, True
 
@@ -282,17 +247,9 @@ class Agent(ABC):
             "user_input": question,
             "start_time": datetime.now().isoformat(),
             "end_time": None,
-            "total_duration_seconds": None,
-            "total_tokens": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-            "total_tokens_retrieval": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
+            "total_duration_seconds": 0,
+            "total_tokens": defaultdict(int),
+            "total_tokens_retrieval": defaultdict(int),
             "turns": [],
             "tool_usage": {},
             "tool_calls_count": 0,
@@ -304,50 +261,59 @@ class Agent(ABC):
         data_storage = {}
 
         # Prepare initial message with instructions
-        messages = [
-            {
-                "role": "user",
-                "content": self.instructions_prompt.format(question=question),
-            }
-        ]
+        initial_prompt = self.instructions_prompt.format(question=question)
 
-        agent_logger.info(
-            f"\033[1;34m[USER INSTRUCTIONS]\033[0m {messages[0]['content']}"
-        )
+        initial_message = TextInput(text=initial_prompt)
+        self.messages: list[InputItem] = [initial_message]
+
+        agent_logger.info(f"\033[1;34m[USER INSTRUCTIONS]\033[0m {initial_prompt}")
 
         turn_count = 0
         final_answer = None
 
         while turn_count < self.max_turns:
             turn_count += 1
-            # Process the current turn
-            result, turn_metadata, should_continue = await self._process_turn(
-                messages, turn_count, data_storage, metadata
-            )
 
-            # Add turn metadata to session metadata
-            metadata["turns"].append(turn_metadata)
+            try:
+                result, turn_metadata, should_continue = await self._process_turn(
+                    turn_count, data_storage
+                )
 
-            # Check if we should continue or if we have a final answer
+                metadata["turns"].append(turn_metadata)
+
+            except ModelException as e:
+                agent_logger.error(f"\033[1;31m[DO NOT RETRY]\033[0m {e}")
+                should_continue = False
+
+            except Exception as e:
+                agent_logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
+                agent_logger.error(
+                    f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
+                )
+
+                # Explain the error to the agent and give them a chance to recover
+                error_message = TextInput(
+                    text=f"An error occurred: {e}. Please review what happened and try a different approach."
+                )
+                self.messages.append(error_message)
+
+                should_continue = True
+
             if not should_continue:
                 final_answer = result
                 break
 
-        # Finalize session metadata
         metadata["end_time"] = datetime.now().isoformat()
 
-        # Add final answer to metadata if available
         if final_answer:
             metadata["final_answer"] = final_answer
 
         # Merge turn-level statistics into session-level statistics
-        metadata = merge_statistics(metadata)
+        metadata = _merge_statistics(metadata)
 
-        # Create logs directory if it doesn't exist
-        os.makedirs("logs", exist_ok=True)
-
-        # Save metadata to logs/{session_id}.json
-        log_path = os.path.join("logs", f"{session_id}.json")
+        # Save results to file
+        os.makedirs("logs/trajectories", exist_ok=True)
+        log_path = os.path.join("logs", "trajectories", f"{session_id}.json")
         with open(log_path, "w") as f:
             json.dump(metadata, f, indent=2)
 

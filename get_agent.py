@@ -1,12 +1,22 @@
-import traceback
-
 from agent import Agent
-from llm import GeneralLLM
 from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
+from model_library.registry_utils import get_registry_model
+from model_library.base import LLMConfig
+
+from dataclasses import dataclass
+from typing import List
 
 
-async def get_agent(model_name: str, parameters: dict, *args, **kwargs):
-    max_turns = parameters.get("max_turns", 50)
+@dataclass
+class Parameters:
+    model_name: str
+    max_turns: int
+    tools: List[str]
+    llm_config: LLMConfig
+
+
+async def get_agent(parameters: Parameters) -> Agent:
+    """Helper method to instantiate an agent with the given parameters"""
     available_tools = {
         "google_web_search": GoogleWebSearch,
         "retrieve_information": RetrieveInformation,
@@ -15,21 +25,15 @@ async def get_agent(model_name: str, parameters: dict, *args, **kwargs):
     }
 
     selected_tools = {}
-    for tool in parameters.get("tools", available_tools.keys()):
+    for tool in parameters.tools:
         if tool not in available_tools:
             raise Exception(
                 f"Tool {tool} not found in tools. Available tools: {available_tools.keys()}"
             )
         selected_tools[tool] = available_tools[tool]()
 
-    provider, model_key = model_name.split("/", 1)
-    llm = GeneralLLM(
-        provider=provider,
-        model_name=model_key,
-        max_tokens=parameters.get("max_output_tokens", 16384),
-        temperature=parameters.get("temperature", 0.0),
-    )
+    model = get_registry_model(parameters.model_name, parameters.llm_config)
 
-    agent = Agent(llm=llm, tools=selected_tools, max_turns=max_turns)
+    agent = Agent(tools=selected_tools, llm=model, max_turns=parameters.max_turns)
 
     return agent
