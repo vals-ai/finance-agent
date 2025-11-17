@@ -39,12 +39,12 @@ GOOGLE_API_KEY=your_google_key
 MISTRAL_API_KEY=your_mistral_key
 TOGETHER_API_KEY=your_together_api_key
 FIREWORKS_API_KEY=your_fireworks_api_key
-GROK_API_KEY=your_grok_api_key
+XAI_API_KEY=your_grok_api_key
 COHERE_API_KEY=cohere_api_key
 
 # Tool API Keys
-SERP_API_KEY=your_serpapi_key
-SEC_API_KEY=your_sec_api_key
+SERPAPI_API_KEY=your_serpapi_key
+SEC_EDGAR_API_KEY=your_sec_api_key
 ```
 
 You can create a SERP API key [here](https://serpapi.com/), and an SEC API key [here](https://sec-api.io/).
@@ -92,32 +92,22 @@ The default configuration is the one we used to run the benchmark.
 
 ## Available Models
 
-The following models are supported by this repo:
+The harness use's the Vals [Model Library](https://github.com/vals-ai/model-library), an open-source repository that allows you to call models in a unified manner.
+
+Generally, any model that is in the Vals Model Library (and that supports tool calling) can be used by the agent. Here are a few commonly used models:
 
 ```
-- openai/gpt-4o-2024-08-06
-- openai/gpt-4o-mini-2024-07-18
-- openai/o3-mini-2025-01-31
-- openai/o1-2024-12-17
-- anthropic/claude-3-5-haiku-20241022
-- anthropic/claude-3-7-sonnet-20250219
-- anthropic/claude-3-7-sonnet-20250219-thinking
-- google/gemini-2.0-flash-001
-- google/gemini-2.5-pro-preview-03-25
-- together/meta-llama/Llama-3.3-70B-Instruct-Turbo
-- together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
-- together/meta-llama/Llama-4-Scout-17B-16E-Instruct
-- mistralai/mistral-small-2503
-- grok/grok-3-beta
-- grok/grok-3-mini-fast-beta-high-reasoning
-- grok/grok-3-mini-fast-beta-low-reasoning
-- cohere/command-a-03-2025
-- openai/gpt-4.1-mini-2025-04-14
-- openai/gpt-4.1-nano-2025-04-14
-- openai/gpt-4.1-2025-04-14
-- openai/o4-mini-2025-04-16
-- openai/o3-2025-04-16
+openai/gpt-5.1-2025-11-13
+anthropic/claude-sonnet-4-5-20250929-thinking
+google/gemini-2.5-pro
+grok/grok-4-fast-reasoning
+cohere/command-a-03-2025
+zai/glm-4.6
+kimi/kimi-k2-thinking
+fireworks/glm-4p6
 ```
+
+Full documentation is available in the model library repo. You can find the full list of models [here](https://github.com/vals-ai/model-library/blob/main/model_library/config/all_models.json).
 
 ## Logs and Output
 
