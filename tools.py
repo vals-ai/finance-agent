@@ -139,7 +139,7 @@ class GoogleWebSearch(Tool):
         )
         self.top_n_results = top_n_results
         if serpapi_api_key is None:
-            serpapi_api_key = os.getenv("SERP_API_KEY")
+            serpapi_api_key = os.getenv("SERPAPI_API_KEY")
         self.serpapi_api_key = serpapi_api_key
 
     @retry_on_429
@@ -156,13 +156,18 @@ class GoogleWebSearch(Tool):
         if not self.serpapi_api_key:
             raise ValueError("SERPAPI_API_KEY is not set")
 
+        # Google expect MM/DD/YYYY format
+        max_date_parts = MAX_END_DATE.split("-")
+        google_date_format = (
+            f"{max_date_parts[1]}/{max_date_parts[2]}/{max_date_parts[0]}"
+        )
+
         params = {
             "api_key": self.serpapi_api_key,
             "engine": "google",
             "q": search_query,
             "num": self.top_n_results,
-            # Hardcode date limit to April 7, 2025
-            "tbs": "cdr:1,cd_max:04/07/2025",
+            "tbs": f"cdr:1,cd_max:{google_date_format}",
         }
 
         async with aiohttp.ClientSession() as session:
@@ -468,19 +473,19 @@ class RetrieveInformation(Tool):
     description: str = (
         """
     Retrieve information from the conversation's data structure (dict) and allow character range extraction.
-
+    
     IMPORTANT: Your prompt MUST include at least one key from the data storage using the exact format: {{key_name}}
-
+    
     For example, if you want to analyze data stored under the key "financial_report", your prompt should look like:
     "Analyze the following financial report and extract the revenue figures: {{financial_report}}"
-
+    
     The {{key_name}} will be replaced with the actual content stored under that key before being sent to the LLM.
     If you don't use this exact format with double braces, the tool will fail to retrieve the information.
-
+    
     You can optionally specify character ranges for each document key to extract only portions of documents. That can be useful to avoid token limit errors or improve efficiency by selecting only part of the document.
     For example, if "financial_report" contains "Annual Report 2023" and you specify a range [1, 5] for that key,
     only "nnual" will be inserted into the prompt.
-
+    
     The output is the result from the LLM that receives the prompt with the inserted data.
     """.strip()
     )
@@ -490,20 +495,13 @@ class RetrieveInformation(Tool):
             "description": "The prompt that will be passed to the LLM. You MUST include at least one data storage key in the format {{key_name}} - for example: 'Summarize this 10-K filing: {{company_10k}}'. The content stored under each key will replace the {{key_name}} placeholder.",
         },
         "input_character_ranges": {
-            "type": "array",
-            "description": "An array mapping document keys to their character ranges. Each range should be an array where the first element is the start index and the second element is the end index. Can be used to only read portions of documents. By default, the full document is used. To use the full document, set the range to an empty list [].",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string"},
-                    "range": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "minItems": 0,
-                        "maxItems": 2,
-                    },
+            "type": "object",
+            "description": "A dictionary mapping document keys to their character ranges. Each range should be an array where the first element is the start index and the second element is the end index. Can be used to only read portions of documents. By default, the full document is used. To use the full document, set the range to an empty list [].",
+            "additionalProperties": {
+                "type": "array",
+                "items": {
+                    "type": "integer",
                 },
-                "required": ["key", "range"],
             },
         },
     }
@@ -519,13 +517,9 @@ class RetrieveInformation(Tool):
         self, arguments: dict, data_storage: dict, model: LLM, *args, **kwargs
     ) -> list[str]:
         prompt: str = arguments.get("prompt")
-        input_character_ranges = arguments.get("input_character_ranges", [])
+        input_character_ranges = arguments.get("input_character_ranges", {})
         if input_character_ranges is None:
-            input_character_ranges = []
-
-        input_character_ranges = {
-            item["key"]: item["range"] for item in input_character_ranges
-        }
+            input_character_ranges = {}
 
         # Verify that the prompt contains at least one placeholder in the correct format
         if not re.search(r"{{[^{}]+}}", prompt):
@@ -570,12 +564,12 @@ class RetrieveInformation(Tool):
             prompt = formatted_prompt.format(**formatted_data)
         except KeyError as e:
             raise KeyError(
-                f"ERROR: The key {e} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
+                f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
 
         response = await model.query(prompt)
 
         return {
             "retrieval": response.output_text_str,
-            "usage": response.metadata.model_dump(),
+            "usage": {**response.metadata.model_dump()},
         }

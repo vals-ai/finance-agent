@@ -15,12 +15,23 @@ from model_library.base import (
     InputItem,
     TextInput,
 )
+from model_library.exceptions import MaxContextWindowExceededError
 
 from logger import get_logger
 from tools import Tool
-from utils import INSTRUCTIONS_PROMPT, _merge_statistics, TOKEN_KEYS
+from utils import INSTRUCTIONS_PROMPT, _merge_statistics, TOKEN_KEYS, COST_KEYS
 
 agent_logger = get_logger(__name__)
+
+
+def dict_replace_none_with_zero(d: dict) -> dict:
+    result = {}
+    for k, v in d.items():
+        if isinstance(v, dict):
+            result[k] = dict_replace_none_with_zero(v)
+        else:
+            result[k] = 0 if v is None else v
+    return result
 
 
 class ModelException(Exception):
@@ -135,10 +146,16 @@ class Agent(ABC):
                 if "usage" in raw_tool_result:
                     # Retrieval can use LLM tokens too, so we need to track them here
                     tool_token_usage = raw_tool_result["usage"]
+                    turn_metadata["retrieval_metadata"] = {**tool_token_usage}
                     for key in TOKEN_KEYS:
-                        turn_metadata["retrieval_metadata"][key] += (
+                        turn_metadata["combined_metadata"][key] += (
                             tool_token_usage.get(key, 0) or 0
                         )
+                    for key in COST_KEYS:
+                        turn_metadata["combined_metadata"]["cost"][key] += (
+                            tool_token_usage.get("cost", {}).get(key, 0) or 0
+                        )
+                    turn_metadata["total_cost"] += tool_token_usage["cost"]["total"]
 
             elif tool_name == "parse_html_page":
                 raw_tool_result = await self.tools[tool_name](arguments, data_storage)
@@ -203,8 +220,17 @@ class Agent(ABC):
         turn_metadata = {
             "tool_calls": [],
             "errors": [],
+            # Metadata for original LLM query for this turn
+            "query_metadata": dict_replace_none_with_zero(
+                response.metadata.model_dump()
+            ),
+            # Metadata from LLM usage by the 'retrieve_information' tool
             "retrieval_metadata": defaultdict(int),
-            "query_metadata": response.metadata.model_dump(),
+            # Metadata from combined LLM query and tool calls for this turn
+            "combined_metadata": dict_replace_none_with_zero(
+                response.metadata.model_dump()
+            ),
+            "total_cost": response.metadata.cost.total,
         }
 
         # Log the thinking content if available
@@ -250,11 +276,13 @@ class Agent(ABC):
             "total_duration_seconds": 0,
             "total_tokens": defaultdict(int),
             "total_tokens_retrieval": defaultdict(int),
+            "total_tokens_query": defaultdict(int),
             "turns": [],
             "tool_usage": {},
             "tool_calls_count": 0,
             "api_calls_count": 0,
             "error_count": 0,
+            "total_cost": 0,
         }
 
         # Initialize data storage for this conversation
@@ -281,6 +309,12 @@ class Agent(ABC):
 
                 metadata["turns"].append(turn_metadata)
 
+            except MaxContextWindowExceededError:
+                agent_logger.warning(
+                    "Max Context Window Exceeded. Removing second earliest message from the stack."
+                )
+                self.messages.pop(1)
+                should_continue = True
             except ModelException as e:
                 agent_logger.error(f"\033[1;31m[DO NOT RETRY]\033[0m {e}")
                 should_continue = False

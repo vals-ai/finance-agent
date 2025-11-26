@@ -6,6 +6,19 @@ TOKEN_KEYS = [
     "reasoning_tokens",
     "cache_read_tokens",
     "cache_write_tokens",
+    "total_input_tokens",
+    "total_output_tokens",
+]
+
+COST_KEYS = [
+    "input",
+    "output",
+    "reasoning",
+    "cache_read",
+    "cache_write",
+    "total_input",
+    "total_output",
+    "total",
 ]
 
 
@@ -40,10 +53,12 @@ def _merge_statistics(metadata: dict) -> dict:
     """
     # Aggregate statistics from all turns
     for turn in metadata["turns"]:
+        metadata["total_cost"] += turn["total_cost"]
         for key in TOKEN_KEYS:
-            print(turn["query_metadata"])
-            metadata["total_tokens"][key] += turn["query_metadata"].get(key, 0) or 0
-            metadata["total_tokens"]["total_tokens"] += (
+            metadata["total_tokens"][key] += turn["combined_metadata"].get(key, 0) or 0
+
+        for key in TOKEN_KEYS:
+            metadata["total_tokens_query"][key] += (
                 turn["query_metadata"].get(key, 0) or 0
             )
 
@@ -51,11 +66,7 @@ def _merge_statistics(metadata: dict) -> dict:
             rm = turn["retrieval_metadata"]
             for key in TOKEN_KEYS:
                 metadata["total_tokens_retrieval"][key] += rm.get(key, 0) or 0
-                metadata["total_tokens_retrieval"]["total_tokens"] += (
-                    rm.get(key, 0) or 0
-                )
 
-        # Count errors
         metadata["error_count"] += len(turn["errors"])
 
         # Aggregate tool usage

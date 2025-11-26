@@ -1,5 +1,5 @@
 # Model library 
-model-library>=0.1.2
+model-library>=0.1.3
 
 # Web tools
 requests==2.32.3
@@ -11,3 +11,4 @@ sec-api==1.0.29
 # Other
 backoff==2.2.1
 aiohttp==3.11.18
+dotenv==1.2.1
