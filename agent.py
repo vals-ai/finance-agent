@@ -273,6 +273,7 @@ class Agent(ABC):
         session_id = session_id or str(uuid.uuid4())
         metadata = {
             "session_id": session_id,
+            "model_key": self.llm.model_key,
             "user_input": question,
             "start_time": datetime.now().isoformat(),
             "end_time": None,
