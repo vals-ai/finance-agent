@@ -55,6 +55,9 @@ class Agent(ABC):
         self.max_turns = max_turns
         self.instructions_prompt = instructions_prompt
 
+        # hijack llm logger
+        self.llm.logger = agent_logger
+
     async def _find_final_answer(self, response_text: str) -> str:
         """
         Search through the response text for the presence of 'FINAL ANSWER:', and if its present,
