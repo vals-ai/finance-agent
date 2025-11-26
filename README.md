@@ -72,7 +72,7 @@ python run_agent.py --questions "What was Apple's revenue in 2023?" --model open
 You can also specify a list of questions in a text file, one question per line, with the following command:
 
 ```bash
-python run_agent.py --question-file my_questions.txt
+python run_agent.py --question-file data/public.txt
 ```
 
 For a full list of parameters, please run:
