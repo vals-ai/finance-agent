@@ -205,6 +205,9 @@ class Agent(ABC):
             response: QueryResult = await self.llm.query(
                 input=self.messages, tools=tool_definitions
             )
+        # raise these directly, rather than handling as ModelException
+        except MaxContextWindowExceededError:
+            raise
         except Exception as e:
             agent_logger.critical(f"Error: {e}")
             agent_logger.critical(f"Traceback: {traceback.format_exc()}")
