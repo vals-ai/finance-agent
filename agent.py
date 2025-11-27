@@ -318,9 +318,19 @@ class Agent(ABC):
 
             except MaxContextWindowExceededError:
                 agent_logger.warning(
-                    "Max Context Window Exceeded. Removing second earliest message from the stack."
+                    "Max Context Window Exceeded. "
+                    "Removing first model response from the stack, "
+                    "as well as all associated tool calls and results."
                 )
+                
+                # delete the first model call
                 self.messages.pop(1)
+
+                # delete all corresponding ToolResults
+                while len(self.messages) > 1 and isinstance(self.messages[1], ToolResult):
+                    self.messages.pop(1)
+                
+                # then keep going!
                 should_continue = True
             except ModelException as e:
                 result = f"Model exception occurred: {e}"
