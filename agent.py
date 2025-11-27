@@ -320,10 +320,13 @@ class Agent(ABC):
                 self.messages.pop(1)
                 should_continue = True
             except ModelException as e:
-                agent_logger.error(f"\033[1;31m[DO NOT RETRY]\033[0m {e}")
+                result = f"Model exception occurred: {e}"
+                metadata["error_count"] += 1
+                agent_logger.error(result)
                 should_continue = False
 
             except Exception as e:
+                metadata["error_count"] += 1
                 agent_logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
                 agent_logger.error(
                     f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
@@ -355,7 +358,8 @@ class Agent(ABC):
         with open(log_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
-        if final_answer:
-            return final_answer, metadata
-        else:
+        if turn_count == self.max_turns:
             return "Max turns reached without final answer.", metadata
+        else:
+            # handles answers AND errors
+            return final_answer, metadata
