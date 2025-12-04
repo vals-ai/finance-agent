@@ -371,8 +371,10 @@ class Agent(ABC):
         with open(log_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
-        if turn_count == self.max_turns:
+        if final_answer:
+            return final_answer, metadata
+        elif turn_count >= self.max_turns:
             return "Max turns reached without final answer.", metadata
         else:
             # handles answers AND errors
-            return final_answer, metadata
+            return "Unable to generate answer for unknown reason", metadata
