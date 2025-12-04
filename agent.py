@@ -55,6 +55,9 @@ class Agent(ABC):
         self.max_turns = max_turns
         self.instructions_prompt = instructions_prompt
 
+        # hijack llm logger
+        self.llm.logger = agent_logger
+
     async def _find_final_answer(self, response_text: str) -> str:
         """
         Search through the response text for the presence of 'FINAL ANSWER:', and if its present,
@@ -202,6 +205,9 @@ class Agent(ABC):
             response: QueryResult = await self.llm.query(
                 input=self.messages, tools=tool_definitions
             )
+        # raise these directly, rather than handling as ModelException
+        except MaxContextWindowExceededError:
+            raise
         except Exception as e:
             agent_logger.critical(f"Error: {e}")
             agent_logger.critical(f"Traceback: {traceback.format_exc()}")
@@ -270,6 +276,7 @@ class Agent(ABC):
         session_id = session_id or str(uuid.uuid4())
         metadata = {
             "session_id": session_id,
+            "model_key": self.llm._registry_key,
             "user_input": question,
             "start_time": datetime.now().isoformat(),
             "end_time": None,
@@ -311,15 +318,28 @@ class Agent(ABC):
 
             except MaxContextWindowExceededError:
                 agent_logger.warning(
-                    "Max Context Window Exceeded. Removing second earliest message from the stack."
+                    "Max Context Window Exceeded. "
+                    "Removing first model response from the stack, "
+                    "as well as all associated tool calls and results."
                 )
+                
+                # delete the first model call
                 self.messages.pop(1)
+
+                # delete all corresponding ToolResults
+                while len(self.messages) > 1 and isinstance(self.messages[1], ToolResult):
+                    self.messages.pop(1)
+                
+                # then keep going!
                 should_continue = True
             except ModelException as e:
-                agent_logger.error(f"\033[1;31m[DO NOT RETRY]\033[0m {e}")
+                result = f"Model exception occurred: {e}"
+                metadata["error_count"] += 1
+                agent_logger.error(result)
                 should_continue = False
 
             except Exception as e:
+                metadata["error_count"] += 1
                 agent_logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
                 agent_logger.error(
                     f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
@@ -353,5 +373,8 @@ class Agent(ABC):
 
         if final_answer:
             return final_answer, metadata
-        else:
+        elif turn_count >= self.max_turns:
             return "Max turns reached without final answer.", metadata
+        else:
+            # handles answers AND errors
+            return "Unable to generate answer for unknown reason", metadata
