@@ -22,9 +22,9 @@ CONSOLE_FORMAT = " ".join((LEVEL, NAME, MSG))
 FILE_FORMAT = " ".join((BASE, LEVEL, NAME, MSG))
 
 # Maximum length for log messages
-# In verbose mode, allow 10K tokens; otherwise truncate to 1K
+# In verbose mode, allow 20K characters; otherwise truncate to 1K
 is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
-MAX_MESSAGE_LENGTH = 10000 if is_verbose else 1000
+MAX_MESSAGE_LENGTH = 20000 if is_verbose else 1000
 
 LOGS_DIR = "logs/raw"
 os.makedirs(LOGS_DIR, exist_ok=True)
