@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 from model_library.base import LLM, ToolBody, ToolDefinition
 
-from logger import get_logger
+from .logger import get_logger
 
 tool_logger = get_logger(__name__)
 
