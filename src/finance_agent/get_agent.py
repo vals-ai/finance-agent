@@ -1,17 +1,22 @@
-from agent import Agent
-from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
-from model_library.registry_utils import get_registry_model
-from model_library.base import LLMConfig
-
 from dataclasses import dataclass
-from typing import List
+
+from model_library.base import LLMConfig
+from model_library.registry_utils import get_registry_model
+
+from finance_agent.agent import Agent
+from finance_agent.tools import (
+    EDGARSearch,
+    GoogleWebSearch,
+    ParseHtmlPage,
+    RetrieveInformation,
+)
 
 
 @dataclass
 class Parameters:
     model_name: str
     max_turns: int
-    tools: List[str]
+    tools: list[str]
     llm_config: LLMConfig
 
 

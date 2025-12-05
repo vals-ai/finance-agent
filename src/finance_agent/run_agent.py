@@ -3,15 +3,15 @@ import asyncio
 import json
 import os
 from datetime import datetime
-
-from agent import agent_logger
-from get_agent import get_agent, Parameters
-from tools import tool_logger
-from tqdm.asyncio import tqdm
-from model_library.base import LLMConfig
-from dotenv import load_dotenv
-
 from typing import Any
+
+from dotenv import load_dotenv
+from model_library.base import LLMConfig
+from tqdm.asyncio import tqdm
+
+from finance_agent.agent import agent_logger
+from finance_agent.get_agent import Parameters, get_agent
+from finance_agent.tools import tool_logger
 
 
 async def run_tests_parallel(
