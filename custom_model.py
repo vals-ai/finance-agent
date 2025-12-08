@@ -16,7 +16,7 @@ from .tools import (
 
 
 async def get_custom_model(
-    model_name: str, parameters: dict, *args, log_level: str = "INFO", **kwargs
+    model_name: str, parameters: dict, *args, log_level: str = "WARNING", **kwargs
 ):
     # set logging level
     tool_logger.setLevel(log_level)
