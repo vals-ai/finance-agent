@@ -1,8 +1,9 @@
 import traceback
 
+from vals.sdk.types import OutputObject
 from model_library.registry_utils import get_registry_model
 
-from src.utils.model_library_utils import create_override_config
+from src.benchmark.utils.model_library_utils import create_override_config
 
 from .agent import Agent, agent_logger
 from .tools import (
@@ -14,7 +15,9 @@ from .tools import (
 )
 
 
-async def get_custom_model(model_name: str, parameters: dict, *args, log_level: str = "WARNING", **kwargs):
+async def get_custom_model(
+    model_name: str, parameters: dict, *args, log_level: str = "WARNING", **kwargs
+):
     # set logging level
     tool_logger.setLevel(log_level)
     agent_logger.setLevel(log_level)
@@ -41,14 +44,13 @@ async def get_custom_model(model_name: str, parameters: dict, *args, log_level: 
                 "llm_output": "Error when calling the agent.",
                 "output_context": {"error": str(e), "traceback": error_traceback},
             }
-        return {
-            "llm_output": response,
-            "metadata": {
-                "in_tokens": metadata["total_tokens"]["prompt_tokens"],
-                "out_tokens": metadata["total_tokens"]["completion_tokens"],
-                "duration_seconds": metadata["total_duration_seconds"],
-            },
-            "output_context": metadata,
-        }
+        return OutputObject(
+            llm_output=response,
+            in_tokens=metadata["total_tokens"]["total_input_tokens"],
+            out_tokens=metadata["total_tokens"]["total_output_tokens"],
+            duration_seconds=metadata["total_duration_seconds"],
+            cost=metadata["total_cost"],
+            output_context=metadata,
+        )
 
     return custom_call
