@@ -1,0 +1,19 @@
+[project]
+name = "finance-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "model-library>=0.1.3",
+    "requests==2.32.3",
+    "beautifulsoup4==4.12.3",
+    "google-search-results==2.4.2",  # for serpapi
+    "sec-api==1.0.29",
+    "backoff==2.2.1",
+    "aiohttp==3.11.18",
+    "python-dotenv==1.2.1",
+]
+
+[tool.uv.sources]
+model-library = { git = "https://github.com/vals-ai/model-library.git" }
