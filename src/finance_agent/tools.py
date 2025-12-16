@@ -169,7 +169,7 @@ class GoogleWebSearch(Tool):
             "tbs": f"cdr:1,cd_max:{google_date_format}",
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(
                 "https://serpapi.com/search.json", params=params
             ) as response:
@@ -316,7 +316,7 @@ class EDGARSearch(Tool):
             "Authorization": self.sec_api_key,
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(
                 self.sec_api_url, json=payload, headers=headers
             ) as response:
@@ -376,7 +376,7 @@ class ParseHtmlPage(Tool):
         Returns:
             str: The parsed text content
         """
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=True) as session:
             try:
                 async with session.get(
                     url, headers=self.headers, timeout=60
