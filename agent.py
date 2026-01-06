@@ -19,7 +19,8 @@ from model_library.exceptions import MaxContextWindowExceededError
 
 from .logger import get_logger
 from .tools import Tool
-from .utils import INSTRUCTIONS_PROMPT, _merge_statistics, TOKEN_KEYS, COST_KEYS
+from .prompt import INSTRUCTIONS_PROMPT
+from .utils import _merge_statistics, TOKEN_KEYS, COST_KEYS
 
 agent_logger = get_logger(__name__)
 

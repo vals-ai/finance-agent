@@ -3,8 +3,7 @@ import traceback
 from vals.sdk.types import OutputObject
 from model_library.registry_utils import get_registry_model
 
-from src.benchmark.utils.model_library_utils import create_override_config
-
+from .utils import create_override_config
 from .agent import Agent, agent_logger
 from .tools import (
     EDGARSearch,
