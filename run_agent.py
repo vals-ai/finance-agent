@@ -22,7 +22,7 @@ async def run_tests_parallel(
     parameters: Parameters,
 ) -> list[dict[str, Any]]:
     """Run multiple questions in parallel using the custom model"""
-    agent = await get_agent(parameters)
+    agent = get_agent(parameters)
 
     semaphore = asyncio.Semaphore(max_concurrent)
 
