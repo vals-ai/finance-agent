@@ -15,7 +15,7 @@ class Parameters:
     llm_config: LLMConfig
 
 
-async def get_agent(parameters: Parameters) -> Agent:
+def get_agent(parameters: Parameters) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
     available_tools = {
         "google_web_search": GoogleWebSearch,
