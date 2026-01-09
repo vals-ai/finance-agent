@@ -4,23 +4,24 @@ import re
 import traceback
 import uuid
 from abc import ABC
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
 
 from model_library.base import (
     LLM,
+    InputItem,
+    QueryResult,
+    RawResponse,
+    TextInput,
     ToolCall,
     ToolResult,
-    QueryResult,
-    InputItem,
-    TextInput,
 )
 from model_library.exceptions import MaxContextWindowExceededError
 
 from .logger import get_logger
-from .tools import Tool
 from .prompt import INSTRUCTIONS_PROMPT
-from .utils import _merge_statistics, TOKEN_KEYS, COST_KEYS
+from .tools import Tool
+from .utils import COST_KEYS, TOKEN_KEYS, _merge_statistics
 
 agent_logger = get_logger(__name__)
 
@@ -186,11 +187,11 @@ class Agent(ABC):
 
     def _shorten_message_history(self):
         """
-        When the max context of the agent is exceeded, we remove some of the earliest messages to 
+        When the max context of the agent is exceeded, we remove some of the earliest messages to
         free up space.
-        
-        We always leave the first input, and from there, remove begin removing model responses 
-        and associated tool results. 
+
+        We always leave the first input, and from there, remove begin removing model responses
+        and associated tool results.
 
         NOTE: This function is very rarely called, most models are able to complete the task within the context window.
         """
@@ -203,17 +204,17 @@ class Agent(ABC):
         # Remove all response items from the first model call - certain models
         # return multiple list items per call
         removed_count = 0
-        while len(self.messages) > 1 and not isinstance(self.messages[1], InputItem):
+        while len(self.messages) > 1 and isinstance(self.messages[1], RawResponse):
             self.messages.pop(1)
             removed_count += 1
 
         agent_logger.info(f"Removed {removed_count} model response item(s)")
 
         # Remove all input items. 99% of the time, this will just be ToolResults
-        # from the previous batch of inputs, but we need to remove all input items, 
+        # from the previous batch of inputs, but we need to remove all input items,
         # otherwise we may get stuck.
         input_item_count = 0
-        while len(self.messages) > 1 and isinstance(self.messages[1], InputItem):
+        while len(self.messages) > 1 and not isinstance(self.messages[1], RawResponse):
             self.messages.pop(1)
             input_item_count += 1
 
