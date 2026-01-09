@@ -1,5 +1,5 @@
 # Model library 
-model-library>=0.1.6
+model-library>=0.1.7
 
 # Web tools
 requests==2.32.3
