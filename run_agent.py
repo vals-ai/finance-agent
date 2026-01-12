@@ -22,7 +22,7 @@ async def run_tests_parallel(
     parameters: Parameters,
 ) -> list[dict[str, Any]]:
     """Run multiple questions in parallel using the custom model"""
-    agent = await get_agent(parameters)
+    agent = get_agent(parameters)
 
     semaphore = asyncio.Semaphore(max_concurrent)
 
@@ -35,7 +35,7 @@ async def run_tests_parallel(
     results = await tqdm.gather(*tasks, desc="Processing questions")
 
     formatted_results = []
-    for i, (question, result) in enumerate(zip(questions, results)):
+    for question, result in enumerate(zip(questions, results)):
         if isinstance(result, Exception):
             formatted_results.append(
                 {"question": question, "success": False, "error": str(result)}
@@ -152,7 +152,7 @@ def main():
         max_turns=args.max_turns,
         tools=args.tools,
         llm_config=LLMConfig(
-            max_output_tokens=args.max_output_tokens,
+            max_tokens=args.max_output_tokens,
             temperature=args.temperature,
         ),
     )

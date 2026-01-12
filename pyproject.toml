@@ -14,6 +14,3 @@ dependencies = [
     "aiohttp==3.11.18",
     "python-dotenv==1.2.1",
 ]
-
-# [tool.uv.sources]
-# model-library = { git = "https://github.com/vals-ai/model-library.git" }
