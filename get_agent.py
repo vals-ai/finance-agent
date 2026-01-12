@@ -1,5 +1,5 @@
-from .agent import Agent
-from .tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
+from agent import Agent
+from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
 from model_library.registry_utils import get_registry_model
 from model_library.base import LLMConfig
 
