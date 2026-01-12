@@ -4,9 +4,9 @@ import json
 import os
 from datetime import datetime
 
-from .agent import agent_logger
-from .get_agent import get_agent, Parameters
-from .tools import tool_logger
+from agent import agent_logger
+from get_agent import get_agent, Parameters
+from tools import tool_logger
 from tqdm.asyncio import tqdm
 from model_library.base import LLMConfig
 from dotenv import load_dotenv
@@ -35,7 +35,7 @@ async def run_tests_parallel(
     results = await tqdm.gather(*tasks, desc="Processing questions")
 
     formatted_results = []
-    for i, (question, result) in enumerate(zip(questions, results)):
+    for question, result in enumerate(zip(questions, results)):
         if isinstance(result, Exception):
             formatted_results.append(
                 {"question": question, "success": False, "error": str(result)}
@@ -152,7 +152,7 @@ def main():
         max_turns=args.max_turns,
         tools=args.tools,
         llm_config=LLMConfig(
-            max_output_tokens=args.max_output_tokens,
+            max_tokens=args.max_output_tokens,
             temperature=args.temperature,
         ),
     )
