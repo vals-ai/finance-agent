@@ -7,10 +7,9 @@ from abc import ABC, abstractmethod
 import aiohttp
 import backoff
 from bs4 import BeautifulSoup
-
 from model_library.base import LLM, ToolBody, ToolDefinition
 
-from .logger import get_logger
+from logger import get_logger
 
 tool_logger = get_logger(__name__)
 
@@ -186,13 +185,11 @@ class GoogleWebSearch(Tool):
 
 class EDGARSearch(Tool):
     name: str = "edgar_search"
-    description: str = (
-        """
+    description: str = """
     Search the EDGAR Database through the SEC API.
     You should provide a query, a list of form types, a list of CIKs, a start date, an end date, a page number, and a top N results.
     The results are returned as a list of dictionaries, each containing the metadata for a filing. It does not contain the full text of the filing.
     """.strip()
-    )
     input_arguments: dict = {
         "query": {
             "type": "string",
@@ -344,13 +341,11 @@ class EDGARSearch(Tool):
 
 class ParseHtmlPage(Tool):
     name: str = "parse_html_page"
-    description: str = (
-        """
+    description: str = """
         Parse an HTML page. This tool is used to parse the HTML content of a page and saves the content outside of the conversation to avoid context window issues.
         You should provide both the URL of the page to parse, as well as the key you want to use to save the result in the agent's data structure.
         The data structure is a dictionary.
     """.strip()
-    )
 
     input_arguments: dict = {
         "url": {"type": "string", "description": "The URL of the HTML page to parse"},
@@ -470,8 +465,7 @@ class ParseHtmlPage(Tool):
 
 class RetrieveInformation(Tool):
     name: str = "retrieve_information"
-    description: str = (
-        """
+    description: str = """
     Retrieve information from the conversation's data structure (dict) and allow character range extraction.
     
     IMPORTANT: Your prompt MUST include at least one key from the data storage using the exact format: {{key_name}}
@@ -488,7 +482,6 @@ class RetrieveInformation(Tool):
     
     The output is the result from the LLM that receives the prompt with the inserted data.
     """.strip()
-    )
     input_arguments: dict = {
         "prompt": {
             "type": "string",

@@ -23,7 +23,6 @@ COST_KEYS = [
 ]
 
 
-
 def _merge_statistics(metadata: dict) -> dict:
     """
     Merge turn-level statistics into session-level statistics.
@@ -67,6 +66,7 @@ def _merge_statistics(metadata: dict) -> dict:
         metadata["total_duration_seconds"] = (end - start).total_seconds()
 
     return metadata
+
 
 def create_override_config(**kwargs) -> LLMConfig:
     # Filter kwargs to only include valid LLMConfig fields

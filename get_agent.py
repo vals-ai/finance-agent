@@ -1,10 +1,11 @@
-from .agent import Agent
-from .tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
-from model_library.registry_utils import get_registry_model
-from model_library.base import LLMConfig
-
 from dataclasses import dataclass
 from typing import List
+
+from model_library.base import LLMConfig
+from model_library.registry_utils import get_registry_model
+
+from agent import Agent
+from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
 
 
 @dataclass
