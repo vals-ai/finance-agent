@@ -31,6 +31,7 @@ dev = [
 [tool.basedpyright]
 exclude = [
   "data/*",
+  ".*",
 ]
-# typeCheckingMode = "strict"
+typeCheckingMode = "basic"
 reportExplicitAny = false

@@ -1,4 +1,4 @@
-.PHONY: help install test test-integration test-all style style-check typecheck config run-models examples browse_models
+.PHONY: help install style typecheck
 
 help:
 	@echo "Makefile for finance-agent"

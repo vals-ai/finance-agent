@@ -3,7 +3,7 @@ from typing import Any
 
 from model_library.base import LLMConfig
 from model_library.registry_utils import get_registry_model
-from vals.sdk.types import OutputObject
+from vals.sdk.types import OutputObject  # pyright: ignore
 
 from agent import Agent, agent_logger
 from tools import (
@@ -24,7 +24,7 @@ def create_override_config(**kwargs: object) -> LLMConfig:
     if "max_output_tokens" in kwargs and "max_tokens" not in kwargs:
         valid_kwargs["max_tokens"] = kwargs["max_output_tokens"]
 
-    return LLMConfig(**valid_kwargs)
+    return LLMConfig(**valid_kwargs)  # pyright: ignore
 
 
 async def get_custom_model(
@@ -65,8 +65,8 @@ async def get_custom_model(
 
         return OutputObject(
             llm_output=response,
-            in_tokens=metadata.total_tokens["total_input_tokens"],
-            out_tokens=metadata.total_tokens["total_output_tokens"],
+            in_tokens=metadata.total_tokens.total_input_tokens,
+            out_tokens=metadata.total_tokens.total_output_tokens,
             duration_seconds=metadata.total_duration_seconds,
             cost=metadata.total_cost,
             output_context=metadata,

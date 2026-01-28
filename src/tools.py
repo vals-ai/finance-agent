@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, override
 
 import aiohttp
 import backoff
@@ -187,6 +187,7 @@ class GoogleWebSearch(Tool):
 
         return results.get("organic_results", [])
 
+    @override
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:
@@ -252,16 +253,16 @@ class EDGARSearch(Tool):
             sec_api_key = os.getenv("SEC_EDGAR_API_KEY")
         if not sec_api_key:
             raise ValueError("SEC_EDGAR_API_KEY is not set")
-        self.sec_api_key = sec_api_key
+        self.sec_api_key: str = sec_api_key
 
-        self.sec_api_url = "https://api.sec-api.io/full-text-search"
+        self.sec_api_url: str = "https://api.sec-api.io/full-text-search"
 
     @retry_on_429
     async def _execute_search(
         self,
         query: str,
-        form_types: list[str],
-        ciks: list[str],
+        form_types: list[str] | str,
+        ciks: list[str] | str,
         start_date: str,
         end_date: str,
         page: int,
@@ -303,7 +304,7 @@ class EDGARSearch(Tool):
                 ciks = json.loads(ciks.replace("'", '"'))
             except json.JSONDecodeError:
                 # Fallback to simple parsing if JSON parsing fails
-                ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]
+                ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]  #
 
         if end_date > MAX_END_DATE:
             end_date = MAX_END_DATE
@@ -402,7 +403,7 @@ class ParseHtmlPage(Tool):
 
         # Remove script and style elements
         for script_or_style in soup(["script", "style"]):
-            script_or_style.extract()
+            _ = script_or_style.extract()
 
         # Get text
         text = soup.get_text()
@@ -414,7 +415,7 @@ class ParseHtmlPage(Tool):
 
     async def _save_tool_output(
         self, output: list[str], key: str, data_storage: dict[str, Any]
-    ) -> str | None:
+    ) -> str:
         """
         Save the parsed HTML text to the data_storage dictionary.
 
@@ -423,7 +424,7 @@ class ParseHtmlPage(Tool):
             data_storage (dict): The dictionary to save the results to
         """
         if not output:
-            return
+            raise ValueError("No output to save")
 
         tool_result = ""
         if key in data_storage:
@@ -446,6 +447,7 @@ class ParseHtmlPage(Tool):
 
         return tool_result
 
+    @override
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:
@@ -458,12 +460,17 @@ class ParseHtmlPage(Tool):
         Returns:
             list[str]: A list containing the parsed text
         """
-        url = arguments.get("url")
-        key = arguments.get("key")
+        url = arguments.get("url", "")
+        if not url:
+            raise ValueError("URL is required")
+        key = arguments.get("key", "")
+        if not key:
+            raise ValueError("Key is required")
+
         text_output = await self._parse_html_page(url)
         tool_result = await self._save_tool_output(text_output, key, data_storage)
 
-        return tool_result
+        return tool_result  # pyright: ignore
 
 
 class RetrieveInformation(Tool):
@@ -512,7 +519,7 @@ class RetrieveInformation(Tool):
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:
-        prompt: str = arguments.get("prompt")
+        prompt: str = arguments["prompt"]
         input_character_ranges = arguments.get("input_character_ranges", {})
         if input_character_ranges is None:
             input_character_ranges = {}

@@ -193,7 +193,9 @@ class Agent(ABC):
                     tool_token_usage: QueryResultMetadata = raw_tool_result["usage"]
                     turn_metadata.retrieval_metadata = tool_token_usage
                     turn_metadata.combined_metadata += tool_token_usage
-                    turn_metadata.total_cost += tool_token_usage.cost.total
+                    turn_metadata.total_cost += (
+                        tool_token_usage.cost.total if tool_token_usage.cost else 0
+                    )
 
             if raw_tool_result["success"]:
                 # Add tool result to messages
