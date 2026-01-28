@@ -3,21 +3,22 @@ import os
 import re
 import traceback
 from abc import ABC, abstractmethod
+from typing import Any, override
 
 import aiohttp
 import backoff
 from bs4 import BeautifulSoup
-
 from model_library.base import LLM, ToolBody, ToolDefinition
+from pydantic import computed_field
 
-from .logger import get_logger
+from logger import VERBOSE, get_logger
 
 tool_logger = get_logger(__name__)
 
 MAX_END_DATE = "2025-04-07"
 
 
-def is_429(exception):
+def is_429(exception: Exception) -> bool:
     is429 = (
         isinstance(exception, aiohttp.ClientResponseError)
         and exception.status == 429
@@ -39,7 +40,7 @@ def retry_on_429(func):
         jitter=backoff.full_jitter,
         giveup=lambda e: not is_429(e),
     )
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: object, **kwargs: object):
         return await func(*args, **kwargs)
 
     return wrapper
@@ -52,39 +53,49 @@ class Tool(ABC):
 
     name: str
     description: str
-    input_arguments: dict
+    input_arguments: dict[str, Any]
     required_arguments: list[str]
+
+    @computed_field
+    @property
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            body=ToolBody(
+                name=self.name,
+                description=self.description,
+                properties=self.input_arguments,
+                required=self.required_arguments,
+            ),
+        )
 
     def __init__(
         self,
-        *args,
-        **kwargs,
+        *args: object,
+        **kwargs: object,
     ):
         super().__init__()
 
-    def get_tool_definition(self) -> ToolDefinition:
-        body = ToolBody(
-            name=self.name,
-            description=self.description,
-            properties=self.input_arguments,
-            required=self.required_arguments,
-        )
-
-        definition = ToolDefinition(name=self.name, body=body)
-
-        return definition
-
     @abstractmethod
-    def call_tool(self, arguments: dict, *args, **kwargs) -> list[str]:
-        pass
+    async def call_tool(
+        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
+    ) -> dict[str, Any]: ...
 
-    async def __call__(self, arguments: dict = None, *args, **kwargs) -> list[str]:
+    async def __call__(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+    ) -> dict[str, Any]:
+        """
+        Wrapper function to call the subclass' call_tool method
+        """
         tool_logger.info(
             f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments: {arguments}"
         )
 
         try:
-            tool_result = await self.call_tool(arguments, *args, **kwargs)
+            tool_result = await self.call_tool(arguments, data_storage, llm)
             tool_logger.info(
                 f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned: {tool_result}"
             )
@@ -94,12 +105,10 @@ class Tool(ABC):
                     "result": tool_result["retrieval"],
                     "usage": tool_result["usage"],
                 }
-            else:
-                return {"success": True, "result": json.dumps(tool_result)}
+            return {"success": True, "result": json.dumps(tool_result)}
         except Exception as e:
-            is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
             error_msg = str(e)
-            if is_verbose:
+            if VERBOSE:
                 error_msg += f"\nTraceback: {traceback.format_exc()}"
                 tool_logger.warning(
                     f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}\nTraceback: {traceback.format_exc()}"
@@ -114,7 +123,7 @@ class Tool(ABC):
 class GoogleWebSearch(Tool):
     name: str = "google_web_search"
     description: str = "Search the web for information"
-    input_arguments: dict = {
+    input_arguments: dict[str, Any] = {
         "search_query": {
             "type": "string",
             "description": "The query to search for",
@@ -126,21 +135,20 @@ class GoogleWebSearch(Tool):
         self,
         top_n_results: int = 10,
         serpapi_api_key: str | None = None,
-        *args,
-        **kwargs,
     ):
         super().__init__(
             self.name,
             self.description,
             self.input_arguments,
             self.required_arguments,
-            *args,
-            **kwargs,
         )
-        self.top_n_results = top_n_results
-        if serpapi_api_key is None:
+        self.top_n_results: int = top_n_results
+        if not serpapi_api_key:
             serpapi_api_key = os.getenv("SERPAPI_API_KEY")
-        self.serpapi_api_key = serpapi_api_key
+        if not serpapi_api_key:
+            raise ValueError("SERPAPI_API_KEY is not set")
+
+        self.serpapi_api_key: str = serpapi_api_key
 
     @retry_on_429
     async def _execute_search(self, search_query: str) -> list[str]:
@@ -179,21 +187,22 @@ class GoogleWebSearch(Tool):
 
         return results.get("organic_results", [])
 
-    async def call_tool(self, arguments: dict) -> list[str]:
+    @override
+    async def call_tool(
+        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
+    ) -> dict[str, Any]:
         results = await self._execute_search(**arguments)
         return results
 
 
 class EDGARSearch(Tool):
     name: str = "edgar_search"
-    description: str = (
-        """
+    description: str = """
     Search the EDGAR Database through the SEC API.
     You should provide a query, a list of form types, a list of CIKs, a start date, an end date, a page number, and a top N results.
     The results are returned as a list of dictionaries, each containing the metadata for a filing. It does not contain the full text of the filing.
     """.strip()
-    )
-    input_arguments: dict = {
+    input_arguments: dict[str, Any] = {
         "query": {
             "type": "string",
             "description": "The keyword or phrase to search, such as 'substantial doubt' OR 'material weakness'",
@@ -238,24 +247,22 @@ class EDGARSearch(Tool):
     def __init__(
         self,
         sec_api_key: str | None = None,
-        *args,
-        **kwargs,
     ):
-        super().__init__(
-            *args,
-            **kwargs,
-        )
+        super().__init__()
         if sec_api_key is None:
             sec_api_key = os.getenv("SEC_EDGAR_API_KEY")
-        self.sec_api_key = sec_api_key
-        self.sec_api_url = "https://api.sec-api.io/full-text-search"
+        if not sec_api_key:
+            raise ValueError("SEC_EDGAR_API_KEY is not set")
+        self.sec_api_key: str = sec_api_key
+
+        self.sec_api_url: str = "https://api.sec-api.io/full-text-search"
 
     @retry_on_429
     async def _execute_search(
         self,
         query: str,
-        form_types: list[str],
-        ciks: list[str],
+        form_types: list[str] | str,
+        ciks: list[str] | str,
         start_date: str,
         end_date: str,
         page: int,
@@ -277,9 +284,6 @@ class EDGARSearch(Tool):
             list[str]: A list of filing results
         """
 
-        if not self.sec_api_key:
-            raise ValueError("SEC_EDGAR_API_KEY is not set")
-
         # Parse form_types if it's a string representation of a JSON array
         if (
             isinstance(form_types, str)
@@ -300,7 +304,7 @@ class EDGARSearch(Tool):
                 ciks = json.loads(ciks.replace("'", '"'))
             except json.JSONDecodeError:
                 # Fallback to simple parsing if JSON parsing fails
-                ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]
+                ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]  #
 
         if end_date > MAX_END_DATE:
             end_date = MAX_END_DATE
@@ -328,31 +332,28 @@ class EDGARSearch(Tool):
 
         return result.get("filings", [])[: int(top_n_results)]
 
-    async def call_tool(self, arguments: dict) -> list[str]:
+    async def call_tool(
+        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
+    ) -> dict[str, Any]:
         try:
             return await self._execute_search(**arguments)
         except Exception as e:
-            is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
-            if is_verbose:
-                tool_logger.error(
-                    f"SEC API error: {e}\nTraceback: {traceback.format_exc()}"
-                )
-            else:
-                tool_logger.error(f"SEC API error: {e}")
-            raise
+            error_msh = f"SEC API error: {e}"
+            if VERBOSE:
+                error_msh += f"\nTraceback: {traceback.format_exc()}"
+            tool_logger.error(error_msh)
+            raise e
 
 
 class ParseHtmlPage(Tool):
     name: str = "parse_html_page"
-    description: str = (
-        """
+    description: str = """
         Parse an HTML page. This tool is used to parse the HTML content of a page and saves the content outside of the conversation to avoid context window issues.
         You should provide both the URL of the page to parse, as well as the key you want to use to save the result in the agent's data structure.
         The data structure is a dictionary.
     """.strip()
-    )
 
-    input_arguments: dict = {
+    input_arguments: dict[str, Any] = {
         "url": {"type": "string", "description": "The URL of the HTML page to parse"},
         "key": {
             "type": "string",
@@ -361,14 +362,8 @@ class ParseHtmlPage(Tool):
     }
     required_arguments: list[str] = ["url", "key"]
 
-    def __init__(
-        self, headers: dict = {"User-Agent": "ValsAI/antoine@vals.ai"}, *args, **kwargs
-    ):
-        super().__init__(
-            *args,
-            **kwargs,
-        )
-        self.headers = headers
+    def __init__(self):
+        super().__init__()
 
     @retry_on_429
     async def _parse_html_page(self, url: str) -> str:
@@ -384,7 +379,9 @@ class ParseHtmlPage(Tool):
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(
-                    url, headers=self.headers, timeout=60
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=60),
+                    headers={"User-Agent": "ValsAI/antoine@vals.ai"},
                 ) as response:
                     response.raise_for_status()
                     html_content = await response.text()
@@ -406,7 +403,7 @@ class ParseHtmlPage(Tool):
 
         # Remove script and style elements
         for script_or_style in soup(["script", "style"]):
-            script_or_style.extract()
+            _ = script_or_style.extract()
 
         # Get text
         text = soup.get_text()
@@ -417,8 +414,8 @@ class ParseHtmlPage(Tool):
         return text
 
     async def _save_tool_output(
-        self, output: list[str], key: str, data_storage: dict
-    ) -> None:
+        self, output: list[str], key: str, data_storage: dict[str, Any]
+    ) -> str:
         """
         Save the parsed HTML text to the data_storage dictionary.
 
@@ -427,7 +424,7 @@ class ParseHtmlPage(Tool):
             data_storage (dict): The dictionary to save the results to
         """
         if not output:
-            return
+            raise ValueError("No output to save")
 
         tool_result = ""
         if key in data_storage:
@@ -450,7 +447,10 @@ class ParseHtmlPage(Tool):
 
         return tool_result
 
-    async def call_tool(self, arguments: dict, data_storage: dict) -> list[str]:
+    @override
+    async def call_tool(
+        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
+    ) -> dict[str, Any]:
         """
         Parse an HTML page and return its text content.
 
@@ -460,18 +460,22 @@ class ParseHtmlPage(Tool):
         Returns:
             list[str]: A list containing the parsed text
         """
-        url = arguments.get("url")
-        key = arguments.get("key")
+        url = arguments.get("url", "")
+        if not url:
+            raise ValueError("URL is required")
+        key = arguments.get("key", "")
+        if not key:
+            raise ValueError("Key is required")
+
         text_output = await self._parse_html_page(url)
         tool_result = await self._save_tool_output(text_output, key, data_storage)
 
-        return tool_result
+        return tool_result  # pyright: ignore
 
 
 class RetrieveInformation(Tool):
     name: str = "retrieve_information"
-    description: str = (
-        """
+    description: str = """
     Retrieve information from the conversation's data structure (dict) and allow character range extraction.
     
     IMPORTANT: Your prompt MUST include at least one key from the data storage using the exact format: {{key_name}}
@@ -488,8 +492,7 @@ class RetrieveInformation(Tool):
     
     The output is the result from the LLM that receives the prompt with the inserted data.
     """.strip()
-    )
-    input_arguments: dict = {
+    input_arguments: dict[str, Any] = {
         "prompt": {
             "type": "string",
             "description": "The prompt that will be passed to the LLM. You MUST include at least one data storage key in the format {{key_name}} - for example: 'Summarize this 10-K filing: {{company_10k}}'. The content stored under each key will replace the {{key_name}} placeholder.",
@@ -514,9 +517,9 @@ class RetrieveInformation(Tool):
         )
 
     async def call_tool(
-        self, arguments: dict, data_storage: dict, model: LLM, *args, **kwargs
-    ) -> list[str]:
-        prompt: str = arguments.get("prompt")
+        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
+    ) -> dict[str, Any]:
+        prompt: str = arguments["prompt"]
         input_character_ranges = arguments.get("input_character_ranges", {})
         if input_character_ranges is None:
             input_character_ranges = {}
@@ -567,9 +570,9 @@ class RetrieveInformation(Tool):
                 f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
 
-        response = await model.query(prompt)
+        response = await llm.query(prompt)
 
         return {
             "retrieval": response.output_text_str,
-            "usage": {**response.metadata.model_dump()},
+            "usage": response.metadata,
         }

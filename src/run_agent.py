@@ -3,15 +3,16 @@ import asyncio
 import json
 import os
 from datetime import datetime
-
-from .agent import agent_logger
-from .get_agent import get_agent, Parameters
-from .tools import tool_logger
-from tqdm.asyncio import tqdm
-from model_library.base import LLMConfig
-from dotenv import load_dotenv
-
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+from model_library.base import LLMConfig
+from tqdm.asyncio import tqdm
+
+from agent import Metadata, agent_logger
+from get_agent import Parameters, get_agent
+from tools import tool_logger
 
 
 async def run_tests_parallel(
@@ -32,10 +33,13 @@ async def run_tests_parallel(
 
     tasks = [process_question(question) for question in questions]
 
-    results = await tqdm.gather(*tasks, desc="Processing questions")
+    results: list[tuple[str, Metadata]] = await tqdm.gather(
+        *tasks, desc="Processing questions"
+    )
 
     formatted_results = []
     for i, (question, result) in enumerate(zip(questions, results)):
+        result = result[0], result[1].model_dump()
         if isinstance(result, Exception):
             formatted_results.append(
                 {"question": question, "success": False, "error": str(result)}
@@ -55,15 +59,15 @@ async def run_tests_parallel(
     return formatted_results
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(
         description="Run the harness for the finance agent benchmark"
     )
     parser.add_argument(
-        "--max-output-tokens",
+        "--max-tokens",
         type=int,
         default=32000,
-        help="Maximum number of output tokens for completion generation",
+        help="Maximum number of tokens for completion generation",
     )
     parser.add_argument(
         "--temperature",
@@ -130,7 +134,8 @@ def main():
     )
     args = parser.parse_args()
 
-    load_dotenv()
+    ENV_FILE = Path(".env")
+    load_dotenv(override=True, dotenv_path=ENV_FILE)
 
     logging_level = args.log_level
     tool_logger.setLevel(logging_level)
@@ -152,7 +157,7 @@ def main():
         max_turns=args.max_turns,
         tools=args.tools,
         llm_config=LLMConfig(
-            max_output_tokens=args.max_output_tokens,
+            max_tokens=args.max_tokens,
             temperature=args.temperature,
         ),
     )
@@ -160,16 +165,14 @@ def main():
     if not os.path.exists(args.results_dir):
         os.makedirs(args.results_dir, exist_ok=True)
 
-    asyncio.run(
-        run_tests_parallel(
-            output_dir=args.results_dir,
-            questions=questions,
-            max_concurrent=args.parallelism,
-            save_results=True,
-            parameters=parameters,
-        )
+    await run_tests_parallel(
+        output_dir=args.results_dir,
+        questions=questions,
+        max_concurrent=args.parallelism,
+        save_results=True,
+        parameters=parameters,
     )
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

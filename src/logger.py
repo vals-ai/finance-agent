@@ -23,8 +23,8 @@ FILE_FORMAT = " ".join((BASE, LEVEL, NAME, MSG))
 
 # Maximum length for log messages
 # In verbose mode, allow 20K characters; otherwise truncate to 1K
-is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
-MAX_MESSAGE_LENGTH = 20000 if is_verbose else 1000
+VERBOSE = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
+MAX_MESSAGE_LENGTH = 20000 if VERBOSE else 1000
 
 LOGS_DIR = "logs/raw"
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -47,7 +47,7 @@ class ColorFormatter(logging.Formatter):
 
     def format(self, record):
         # Truncate message if it exceeds MAX_MESSAGE_LENGTH
-        if len(record.msg) > MAX_MESSAGE_LENGTH and not is_verbose:
+        if len(record.msg) > MAX_MESSAGE_LENGTH and not VERBOSE:
             record.msg = record.msg[:MAX_MESSAGE_LENGTH] + "... [truncated]"
 
         log_fmt = self.FORMATS.get(record.levelno)
@@ -60,7 +60,7 @@ class TruncatingFormatter(logging.Formatter):
 
     def format(self, record):
         # Truncate message if it exceeds MAX_MESSAGE_LENGTH
-        if len(record.msg) > MAX_MESSAGE_LENGTH and not is_verbose:
+        if len(record.msg) > MAX_MESSAGE_LENGTH and not VERBOSE:
             record.msg = record.msg[:MAX_MESSAGE_LENGTH] + "... [truncated]"
 
         return super().format(record)
