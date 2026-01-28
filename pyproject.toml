@@ -27,3 +27,10 @@ dev = [
   # env
   "dotenv",
 ]
+
+[tool.basedpyright]
+exclude = [
+  "data/*",
+]
+# typeCheckingMode = "strict"
+reportExplicitAny = false

@@ -4,24 +4,26 @@ import re
 import traceback
 import uuid
 from abc import ABC
-from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 from model_library.base import (
     LLM,
     InputItem,
     QueryResult,
+    QueryResultMetadata,
     RawResponse,
     TextInput,
     ToolCall,
     ToolResult,
 )
 from model_library.exceptions import MaxContextWindowExceededError
+from pydantic import BaseModel
 
 from logger import get_logger
 from prompt import INSTRUCTIONS_PROMPT
 from tools import Tool
-from utils import COST_KEYS, TOKEN_KEYS, _merge_statistics
+from utils import _merge_statistics
 
 agent_logger = get_logger(__name__)
 
@@ -44,6 +46,40 @@ class ModelException(Exception):
     pass
 
 
+class TurnMetadata(BaseModel):
+    tool_calls: list[dict[str, Any]] = []
+    errors: list[str] = []
+    query_metadata: QueryResultMetadata
+    retrieval_metadata: QueryResultMetadata
+    combined_metadata: QueryResultMetadata
+    total_cost: float
+
+
+class Metadata(BaseModel):
+    session_id: str
+    model_key: str
+    user_input: str
+
+    start_time: str = datetime.now().isoformat()
+    end_time: str | None = None
+    total_duration_seconds: float | None = None
+
+    total_tokens: QueryResultMetadata = QueryResultMetadata()
+    total_tokens_retrieval: QueryResultMetadata = QueryResultMetadata()
+    total_tokens_query: QueryResultMetadata = QueryResultMetadata()
+    total_cost: float = 0
+
+    tool_usage: dict[str, int] = {}
+    tool_calls_count: int = 0
+
+    api_calls_count: int = 0
+
+    turns: list[TurnMetadata] = []
+    error_count: int = 0
+
+    final_answer: str | None = None
+
+
 class Agent(ABC):
     def __init__(
         self,
@@ -52,15 +88,15 @@ class Agent(ABC):
         max_turns: int = 20,
         instructions_prompt: str = INSTRUCTIONS_PROMPT,
     ):
-        self.tools = tools
-        self.llm = llm
-        self.max_turns = max_turns
-        self.instructions_prompt = instructions_prompt
+        self.tools: dict[str, Tool] = tools
+        self.llm: LLM = llm
+        self.max_turns: int = max_turns
+        self.instructions_prompt: str = instructions_prompt
 
         # hijack llm logger
         self.llm.logger = agent_logger
 
-    async def _find_final_answer(self, response_text: str) -> str:
+    async def _find_final_answer(self, response_text: str) -> str | None:
         """
         Search through the response text for the presence of 'FINAL ANSWER:', and if its present,
         extract the answer and any sources
@@ -93,7 +129,10 @@ class Agent(ABC):
         return None
 
     async def _process_tool_calls(
-        self, tool_calls: list[ToolCall], data_storage: dict, turn_metadata: dict
+        self,
+        tool_calls: list[ToolCall],
+        data_storage: dict[str, Any],
+        turn_metadata: TurnMetadata,
     ):
         """
         Helper method to process tool calls, handling errors, validating arguments,
@@ -101,7 +140,7 @@ class Agent(ABC):
         """
 
         tool_results: list[ToolResult] = []
-        tool_call_metadatas: list[dict] = []
+        tool_call_metadatas: list[dict[str, Any]] = []
         errors: list[str] = []
 
         for tool_call in tool_calls:
@@ -122,7 +161,7 @@ class Agent(ABC):
 
                 tool_call_metadata["error"] = error_msg
                 tool_call_metadatas.append(tool_call_metadata)
-                turn_metadata["errors"].append(error_msg)
+                turn_metadata.errors.append(error_msg)
 
                 tool_result = ToolResult(tool_call=tool_call, result=error_msg)
                 tool_results.append(tool_result)
@@ -144,28 +183,17 @@ class Agent(ABC):
                     continue
 
             # Call tools with appropriate arguments
+            raw_tool_result = await self.tools[tool_name](
+                arguments, data_storage, self.llm
+            )
+
             if tool_name == "retrieve_information":
-                raw_tool_result = await self.tools[tool_name](
-                    arguments, data_storage, self.llm
-                )
                 if "usage" in raw_tool_result:
                     # Retrieval can use LLM tokens too, so we need to track them here
-                    tool_token_usage = raw_tool_result["usage"]
-                    turn_metadata["retrieval_metadata"] = {**tool_token_usage}
-                    for key in TOKEN_KEYS:
-                        turn_metadata["combined_metadata"][key] += (
-                            tool_token_usage.get(key, 0) or 0
-                        )
-                    for key in COST_KEYS:
-                        turn_metadata["combined_metadata"]["cost"][key] += (
-                            tool_token_usage.get("cost", {}).get(key, 0) or 0
-                        )
-                    turn_metadata["total_cost"] += tool_token_usage["cost"]["total"]
-
-            elif tool_name == "parse_html_page":
-                raw_tool_result = await self.tools[tool_name](arguments, data_storage)
-            else:
-                raw_tool_result = await self.tools[tool_name](arguments)
+                    tool_token_usage: QueryResultMetadata = raw_tool_result["usage"]
+                    turn_metadata.retrieval_metadata = tool_token_usage
+                    turn_metadata.combined_metadata += tool_token_usage
+                    turn_metadata.total_cost += tool_token_usage.cost.total
 
             if raw_tool_result["success"]:
                 # Add tool result to messages
@@ -174,14 +202,13 @@ class Agent(ABC):
                 tool_call_metadata["error"] = raw_tool_result["result"]
                 errors.append(raw_tool_result["result"])
 
-            tool_result = ToolResult(
-                tool_call=tool_call, result=raw_tool_result["result"]
+            tool_results.append(
+                ToolResult(tool_call=tool_call, result=raw_tool_result["result"])
             )
-            tool_results.append(tool_result)
 
             tool_call_metadatas.append(tool_call_metadata)
 
-        turn_metadata["tool_calls"].extend(tool_call_metadatas)
+        turn_metadata.tool_calls.extend(tool_call_metadatas)
 
         return tool_results
 
@@ -221,7 +248,9 @@ class Agent(ABC):
         if input_item_count > 0:
             agent_logger.info(f"Removed {input_item_count} InputItem(s)")
 
-    async def _process_turn(self, turn_count, data_storage):
+    async def _process_turn(
+        self, turn_count: int, data_storage: dict[str, Any]
+    ) -> tuple[str | None, TurnMetadata]:
         """
         Process a single turn in the agent's conversation.
 
@@ -234,7 +263,7 @@ class Agent(ABC):
         """
         agent_logger.info(f"\033[1;34m[TURN {turn_count}]\033[0m")
 
-        tool_definitions = [tool.get_tool_definition() for tool in self.tools.values()]
+        tool_definitions = [tool.tool_definition for tool in self.tools.values()]
         agent_logger.info(
             f"\033[1;35m[TOOLS AVAILABLE]\033[0m {[tool.name for tool in tool_definitions]}"
         )
@@ -261,26 +290,24 @@ class Agent(ABC):
             f"\033[1;36m[TOOL CALLS RECEIVED]\033[0m {len(tool_calls)} tool calls: {[tc.name for tc in tool_calls]}"
         )
 
-        turn_metadata = {
-            "tool_calls": [],
-            "errors": [],
+        if not response.metadata.cost:
+            raise Exception("LLM response metadata has no cost")
+
+        turn_metadata = TurnMetadata(
             # Metadata for original LLM query for this turn
-            "query_metadata": dict_replace_none_with_zero(
-                response.metadata.model_dump()
-            ),
+            query_metadata=response.metadata,
             # Metadata from LLM usage by the 'retrieve_information' tool
-            "retrieval_metadata": defaultdict(int),
+            retrieval_metadata=QueryResultMetadata(),
             # Metadata from combined LLM query and tool calls for this turn
-            "combined_metadata": dict_replace_none_with_zero(
-                response.metadata.model_dump()
-            ),
-            "total_cost": response.metadata.cost.total,
-        }
+            combined_metadata=response.metadata,
+            total_cost=response.metadata.cost.total,
+        )
+
+        final_answer = None
 
         # Log the thinking content if available
         if reasoning_text:
             agent_logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
-
         if response_text:
             agent_logger.info(f"\033[1;33m[LLM RESPONSE]\033[0m {response_text}")
 
@@ -290,16 +317,15 @@ class Agent(ABC):
             )
             self.messages.extend(tool_results)
 
-        else:
+        elif response_text:
             # Look for the text "FINAL ANSWER:" in the response text
             final_answer = await self._find_final_answer(response_text)
 
-            if final_answer:
-                return final_answer, turn_metadata, False
+        return final_answer, turn_metadata
 
-        return None, turn_metadata, True
-
-    async def run(self, question: str, session_id: str = None) -> tuple[str, dict]:
+    async def run(
+        self, question: str, session_id: str | None = None
+    ) -> tuple[str, Metadata]:
         """
         Run the agent on a question from the user.
 
@@ -312,24 +338,14 @@ class Agent(ABC):
         """
         # Initialize metadata
         session_id = session_id or str(uuid.uuid4())
-        metadata = {
-            "session_id": session_id,
-            "model_key": self.llm._registry_key,
-            "user_input": question,
-            "start_time": datetime.now().isoformat(),
-            "end_time": None,
-            "total_duration_seconds": 0,
-            "total_tokens": defaultdict(int),
-            "total_tokens_retrieval": defaultdict(int),
-            "total_tokens_query": defaultdict(int),
-            "turns": [],
-            "tool_usage": {},
-            "tool_calls_count": 0,
-            "api_calls_count": 0,
-            "error_count": 0,
-            "total_cost": 0,
-        }
 
+        assert self.llm._registry_key
+
+        metadata = Metadata(
+            session_id=session_id,
+            model_key=self.llm._registry_key,
+            user_input=question,
+        )
         # Initialize data storage for this conversation
         data_storage = {}
 
@@ -348,23 +364,25 @@ class Agent(ABC):
             turn_count += 1
 
             try:
-                result, turn_metadata, should_continue = await self._process_turn(
+                final_answer, turn_metadata = await self._process_turn(
                     turn_count, data_storage
                 )
 
-                metadata["turns"].append(turn_metadata)
+                metadata.turns.append(turn_metadata)
+
+                if final_answer:
+                    break
 
             except MaxContextWindowExceededError:
-                self._shorten_message_history()
-                should_continue = True
+                self._shorten_message_history()  # TODO
             except ModelException as e:
                 result = f"Model exception occurred: {e}"
-                metadata["error_count"] += 1
+                metadata.error_count += 1
                 agent_logger.error(result)
-                should_continue = False
+                break
 
             except Exception as e:
-                metadata["error_count"] += 1
+                metadata.error_count += 1
                 agent_logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
                 agent_logger.error(
                     f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
@@ -375,17 +393,12 @@ class Agent(ABC):
                     text=f"An error occurred: {e}. Please review what happened and try a different approach."
                 )
                 self.messages.append(error_message)
-
-                should_continue = True
-
-            if not should_continue:
-                final_answer = result
                 break
 
-        metadata["end_time"] = datetime.now().isoformat()
+        metadata.end_time = datetime.now().isoformat()
 
         if final_answer:
-            metadata["final_answer"] = final_answer
+            metadata.final_answer = final_answer
 
         # Merge turn-level statistics into session-level statistics
         metadata = _merge_statistics(metadata)
@@ -394,7 +407,7 @@ class Agent(ABC):
         os.makedirs("logs/trajectories", exist_ok=True)
         log_path = os.path.join("logs", "trajectories", f"{session_id}.json")
         with open(log_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+            json.dump(metadata.model_dump(), f, indent=2)
 
         if final_answer:
             return final_answer, metadata

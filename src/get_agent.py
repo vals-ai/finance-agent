@@ -1,18 +1,15 @@
-from dataclasses import dataclass
-from typing import List
-
 from model_library.base import LLMConfig
 from model_library.registry_utils import get_registry_model
+from pydantic import BaseModel
 
 from agent import Agent
-from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation
+from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation, Tool
 
 
-@dataclass
-class Parameters:
+class Parameters(BaseModel):
     model_name: str
     max_turns: int
-    tools: List[str]
+    tools: list[str]
     llm_config: LLMConfig
 
 
@@ -25,7 +22,7 @@ def get_agent(parameters: Parameters) -> Agent:
         "edgar_search": EDGARSearch,
     }
 
-    selected_tools = {}
+    selected_tools: dict[str, Tool] = {}
     for tool in parameters.tools:
         if tool not in available_tools:
             raise Exception(
@@ -33,8 +30,8 @@ def get_agent(parameters: Parameters) -> Agent:
             )
         selected_tools[tool] = available_tools[tool]()
 
-    model = get_registry_model(parameters.model_name, parameters.llm_config)
+    llm = get_registry_model(parameters.model_name, parameters.llm_config)
 
-    agent = Agent(tools=selected_tools, llm=model, max_turns=parameters.max_turns)
+    agent = Agent(tools=selected_tools, llm=llm, max_turns=parameters.max_turns)
 
     return agent
