@@ -3,7 +3,14 @@ from model_library.registry_utils import get_registry_model
 from pydantic import BaseModel
 
 from agent import Agent
-from tools import EDGARSearch, GoogleWebSearch, ParseHtmlPage, RetrieveInformation, Tool
+from tools import (
+    EDGARSearch,
+    GoogleWebSearch,
+    ParseHtmlPage,
+    RetrieveInformation,
+    SubmitFinalResult,
+    Tool,
+)
 
 
 class Parameters(BaseModel):
@@ -29,6 +36,8 @@ def get_agent(parameters: Parameters) -> Agent:
                 f"Tool {tool} not found in tools. Available tools: {available_tools.keys()}"
             )
         selected_tools[tool] = available_tools[tool]()
+
+    selected_tools["submit_final_result"] = SubmitFinalResult()
 
     llm = get_registry_model(parameters.model_name, parameters.llm_config)
 
