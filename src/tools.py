@@ -199,7 +199,7 @@ class EDGARSearch(Tool):
     name: str = "edgar_search"
     description: str = """
     Search the EDGAR Database through the SEC API.
-    You should provide a query, a start date, an end date, a page number, and a top N results. Optionally provider a list of form types, a list of CIKs.
+    You should provide a query, a start date, an end date, a page number, and a top N results. Optionally provide a list of form types, and a list of CIKs.
     The results are returned as a list of dictionaries, each containing the metadata for a filing. It does not contain the full text of the filing.
     """.strip()
     input_arguments: dict[str, Any] = {
