@@ -1,6 +1,5 @@
 import logging
 import os
-from datetime import datetime
 
 GREEN = "\x1b[32;20m"
 GREY = "\x1b[38;20m"
@@ -21,13 +20,12 @@ CONSOLE_FORMAT = " ".join((LEVEL, NAME, MSG))
 # Format for file output (with date)
 FILE_FORMAT = " ".join((BASE, LEVEL, NAME, MSG))
 
-# Maximum length for log messages
-# In verbose mode, allow 20K characters; otherwise truncate to 1K
 VERBOSE = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
-MAX_MESSAGE_LENGTH = 20000 if VERBOSE else 1000
+MAX_MESSAGE_LENGTH = 20000
 
-LOGS_DIR = "logs/raw"
-os.makedirs(LOGS_DIR, exist_ok=True)
+# Global run context for organized logging
+_current_run_dir: str | None = None
+_question_file_handlers: dict[str, list[logging.FileHandler]] = {}
 
 
 def color(color):
@@ -36,7 +34,18 @@ def color(color):
     return " ".join((colored_str, bold_str, MSG))
 
 
-class ColorFormatter(logging.Formatter):
+class TruncatingFormatter(logging.Formatter):
+    def format(self, record):
+        # truncate message
+        if len(record.msg) > MAX_MESSAGE_LENGTH and not VERBOSE:
+            record.msg = record.msg[:MAX_MESSAGE_LENGTH] + "... [truncated]"
+            half = MAX_MESSAGE_LENGTH // 2
+            record.msg = f"{record.msg[:half]}...[truncated]...{record.msg[-half:]}"
+
+        return super().format(record)
+
+
+class ColorFormatter(TruncatingFormatter):
     FORMATS = {
         logging.DEBUG: color(GREY),
         logging.INFO: color(GREEN),
@@ -46,28 +55,16 @@ class ColorFormatter(logging.Formatter):
     }
 
     def format(self, record):
-        # Truncate message if it exceeds MAX_MESSAGE_LENGTH
-        if len(record.msg) > MAX_MESSAGE_LENGTH and not VERBOSE:
-            record.msg = record.msg[:MAX_MESSAGE_LENGTH] + "... [truncated]"
+        super().format(record)
 
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 
 
-class TruncatingFormatter(logging.Formatter):
-    """Formatter that truncates long messages."""
-
-    def format(self, record):
-        # Truncate message if it exceeds MAX_MESSAGE_LENGTH
-        if len(record.msg) > MAX_MESSAGE_LENGTH and not VERBOSE:
-            record.msg = record.msg[:MAX_MESSAGE_LENGTH] + "... [truncated]"
-
-        return super().format(record)
-
-
 def get_logger(name: str) -> logging.Logger:
-    """Get a configured logger instance."""
+    """Get a configured logger instance"""
+
     logger = logging.getLogger(name)
     logger.propagate = False
 
@@ -81,8 +78,22 @@ def get_logger(name: str) -> logging.Logger:
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = os.path.join(LOGS_DIR, f"{name}_{timestamp}.log")
+        # File handlers are added per-question via setup_question_logging()
+
+    return logger
+
+
+def setup_question_logging(question_dir: str, loggers: list[str]) -> None:
+    """Adds a file handler for the question"""
+
+    global _question_file_handlers
+    os.makedirs(question_dir, exist_ok=True)
+
+    handlers = []
+    for logger_name in loggers:
+        logger = logging.getLogger(logger_name)
+
+        log_file = os.path.join(question_dir, f"{logger_name}.log")
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)
         file_formatter = TruncatingFormatter(
@@ -90,5 +101,24 @@ def get_logger(name: str) -> logging.Logger:
         )
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
+        handlers.append(file_handler)
 
-    return logger
+    _question_file_handlers[question_dir] = handlers
+
+
+def teardown_question_logging(question_dir: str) -> None:
+    """Removes the file handler for the question"""
+
+    global _question_file_handlers
+    if question_dir not in _question_file_handlers:
+        return
+
+    for handler in _question_file_handlers[question_dir]:
+        handler.close()
+        # find and remove question logger
+        for logger_name in ["agent", "tools", "__main__"]:
+            logger = logging.getLogger(logger_name)
+            if handler in logger.handlers:
+                logger.removeHandler(handler)
+
+    del _question_file_handlers[question_dir]
