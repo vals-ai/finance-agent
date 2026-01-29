@@ -9,7 +9,7 @@ This repo contains the codebase to run the agent that was used to create the ben
 This agent connects to various data sources including:
 
 - SEC EDGAR database
-- Google web search
+- Web search (via Tavily)
 - HTML page parsing capabilities
 - Information retrieval and analysis
 
@@ -43,11 +43,11 @@ XAI_API_KEY=your_grok_api_key
 COHERE_API_KEY=cohere_api_key
 
 # Tool API Keys
-SERPAPI_API_KEY=your_serpapi_key
+TAVILY_API_KEY=your_tavily_key
 SEC_EDGAR_API_KEY=your_sec_api_key
 ```
 
-You can create a SERP API key [here](https://serpapi.com/), and an SEC API key [here](https://sec-api.io/).
+You can create a Tavily API key [here](https://tavily.com/), and an SEC API key [here](https://sec-api.io/).
 
 ## Running the Agent
 
@@ -85,7 +85,7 @@ The default configuration is the one we used to run the benchmark.
 
 ## Available Tools
 
-- `google_web_search`: Search the web for information
+- `web_search`: Search the web for information
 - `edgar_search`: Search the SEC's EDGAR database for filings
 - `parse_html_page`: Parse and extract content from web pages
 - `retrieve_information`: Access stored information from previous steps

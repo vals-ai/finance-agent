@@ -8,7 +8,7 @@ from vals.sdk.types import OutputObject  # pyright: ignore
 from agent import Agent, agent_logger
 from tools import (
     EDGARSearch,
-    GoogleWebSearch,
+    TavilyWebSearch,
     ParseHtmlPage,
     RetrieveInformation,
     Tool,
@@ -43,7 +43,7 @@ async def get_custom_model(
     llm = get_registry_model(model_name, create_override_config(**parameters))
 
     tools: dict[str, Tool] = {
-        "google_web_search": GoogleWebSearch(),
+        "web_search": TavilyWebSearch(),
         "retrieve_information": RetrieveInformation(),
         "parse_html_page": ParseHtmlPage(),
         "edgar_search": EDGARSearch(),

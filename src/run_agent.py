@@ -109,6 +109,9 @@ async def run_tests_parallel(
     return formatted_results
 
 
+VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="Run the harness for the finance agent benchmark"
@@ -150,18 +153,8 @@ async def main():
         "--tools",
         type=str,
         nargs="+",
-        default=[
-            "google_web_search",
-            "retrieve_information",
-            "parse_html_page",
-            "edgar_search",
-        ],
-        choices=[
-            "google_web_search",
-            "retrieve_information",
-            "parse_html_page",
-            "edgar_search",
-        ],
+        default=VALID_TOOLS,
+        choices=VALID_TOOLS,
         help="List of tools to make available to the agent",
     )
     parser.add_argument(
