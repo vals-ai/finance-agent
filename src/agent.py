@@ -284,7 +284,6 @@ class Agent(ABC):
             )
             self.messages.extend(tool_results)
 
-            agent_logger.info(tool_results)
             submit_final_result_tool_result = next(
                 (
                     tool_result

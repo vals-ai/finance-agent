@@ -123,7 +123,7 @@ class Tool(ABC):
 class SubmitFinalResult(Tool):
     name: str = "submit_final_result"
     description: str = """
-    Submit the final result to the agent.
+    Submit the final result to the agent. The user will not see your response if you do not use this tool to submit.
     This should only be called once, at the end of the conversation. Calling it will end the conversation.
     You should provide the final result as a string.
     """.strip()
