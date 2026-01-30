@@ -12,11 +12,33 @@ from tqdm.asyncio import tqdm
 
 from agent import Metadata, agent_logger
 from get_agent import Parameters, get_agent
+from logger import (
+    setup_question_logging,
+    teardown_question_logging,
+)
 from tools import tool_logger
 
 
+def create_run_directory(model_name: str) -> str:
+    """Creates a run directory with the timestamp and model name"""
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    sanitized_model_name = model_name.replace("/", "_")
+    run_dir = os.path.join("logs", f"{timestamp}_{sanitized_model_name}")
+    os.makedirs(run_dir, exist_ok=True)
+
+    return run_dir
+
+
+def create_question_directory(run_dir: str, question_index: int) -> str:
+    """Creates a question directory with the index"""
+
+    question_dir = os.path.join(run_dir, f"q{question_index:03d}")
+    os.makedirs(question_dir, exist_ok=True)
+    return question_dir
+
+
 async def run_tests_parallel(
-    output_dir: str,
     questions: list[str],
     max_concurrent: int,
     save_results: bool,
@@ -25,13 +47,43 @@ async def run_tests_parallel(
     """Run multiple questions in parallel using the custom model"""
     agent = get_agent(parameters)
 
+    run_dir = create_run_directory(parameters.model_name)
+
+    # save metadata
+    run_info = {
+        "timestamp": datetime.now().isoformat(),
+        "model": parameters.model_name,
+        "max_turns": parameters.max_turns,
+        "tools": parameters.tools,
+        "llm_config": {
+            "max_tokens": parameters.llm_config.max_tokens,
+            "temperature": parameters.llm_config.temperature,
+        },
+        "num_questions": len(questions),
+    }
+    with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+        json.dump(run_info, f, indent=2)
+
+    # save question index mapping
+    questions_map = {f"q{i + 1:03d}": q for i, q in enumerate(questions)}
+    with open(os.path.join(run_dir, "questions.json"), "w") as f:
+        json.dump(questions_map, f, indent=2)
+
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def process_question(question):
+    async def process_question(question: str, question_index: int):
         async with semaphore:
-            return await agent.run(question)
+            question_dir = create_question_directory(run_dir, question_index)
+            setup_question_logging(question_dir, ["agent", "tools"])
 
-    tasks = [process_question(question) for question in questions]
+            try:
+                result = await agent.run(question, question_dir=question_dir)
+                return result
+            finally:
+                # Tear down question-specific logging
+                teardown_question_logging(question_dir)
+
+    tasks = [process_question(question, i + 1) for i, question in enumerate(questions)]
 
     results: list[tuple[str, Metadata]] = await tqdm.gather(
         *tasks, desc="Processing questions"
@@ -50,9 +102,7 @@ async def run_tests_parallel(
             )
 
     if save_results:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = os.path.join(output_dir, f"results_test_{timestamp}.json")
-
+        output_file = os.path.join(run_dir, "results.json")
         with open(output_file, "w") as f:
             json.dump(formatted_results, f, indent=2)
 
@@ -121,12 +171,6 @@ async def main():
         help="Maximum number of turns for the agent to take before stopping",
     )
     parser.add_argument(
-        "--results-dir",
-        type=str,
-        default="results",
-        help="Directory to save results to.",
-    )
-    parser.add_argument(
         "--parallelism",
         type=int,
         default=1,
@@ -162,11 +206,7 @@ async def main():
         ),
     )
 
-    if not os.path.exists(args.results_dir):
-        os.makedirs(args.results_dir, exist_ok=True)
-
     await run_tests_parallel(
-        output_dir=args.results_dir,
         questions=questions,
         max_concurrent=args.parallelism,
         save_results=True,

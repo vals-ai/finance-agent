@@ -90,14 +90,16 @@ class Tool(ABC):
         """
         Wrapper function to call the subclass' call_tool method
         """
+        formatted_args = json.dumps(arguments, indent=2, default=str)
         tool_logger.info(
-            f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments: {arguments}"
+            f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}"
         )
 
         try:
             tool_result = await self.call_tool(arguments, data_storage, llm)
+            formatted_result = json.dumps(tool_result, indent=2, default=str)
             tool_logger.info(
-                f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned: {tool_result}"
+                f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}"
             )
             if self.name == "retrieve_information":
                 return {

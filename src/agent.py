@@ -302,7 +302,10 @@ class Agent(ABC):
         return None, turn_metadata
 
     async def run(
-        self, question: str, session_id: str | None = None
+        self,
+        question: str,
+        question_dir: str,
+        session_id: str | None = None,
     ) -> tuple[str, Metadata]:
         """
         Run the agent on a question from the user.
@@ -381,11 +384,11 @@ class Agent(ABC):
         # Merge turn-level statistics into session-level statistics
         metadata = _merge_statistics(metadata)
 
-        # Save results to file
-        os.makedirs("logs/trajectories", exist_ok=True)
-        log_path = os.path.join("logs", "trajectories", f"{session_id}.json")
-        with open(log_path, "w") as f:
-            json.dump(metadata.model_dump(), f, indent=2)
+        # save trajectory
+        if question_dir:
+            log_path = os.path.join(question_dir, "trajectory.json")
+            with open(log_path, "w") as f:
+                json.dump(metadata.model_dump(), f, indent=2)
 
         if final_answer:
             return final_answer, metadata
