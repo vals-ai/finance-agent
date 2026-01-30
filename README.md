@@ -54,31 +54,31 @@ You can create a Tavily API key [here](https://tavily.com/), and an SEC API key 
 To experiment with the agent, you can run the following command:
 
 ```bash
-python run_agent.py --questions "What was Apple's revenue in 2023?"
+python src/run_agent.py --questions "What was Apple's revenue in 2023?"
 ```
 
 You can specify multiple questions at once:
 
 ```bash
-python run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
+pythons src/run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
 ```
 
 To specify a specific model, use the `--model` flag:
 
 ```bash
-python run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-4o
+python src/run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-4o
 ```
 
 You can also specify a list of questions in a text file, one question per line, with the following command:
 
 ```bash
-python run_agent.py --question-file data/public.txt
+python src/run_agent.py --question-file data/public.txt
 ```
 
 For a full list of parameters, please run:
 
 ```bash
-python run_agent.py --help
+python src/run_agent.py --help
 ```
 
 The default configuration is the one we used to run the benchmark.
