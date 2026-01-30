@@ -303,7 +303,7 @@ class EDGARSearch(Tool):
         },
     }
     required_arguments: list[str] = [
-        "query",
+        "search_query",
     ]
 
     def __init__(
