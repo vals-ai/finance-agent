@@ -120,6 +120,34 @@ class Tool(ABC):
             return {"success": False, "result": error_msg}
 
 
+class SubmitFinalResult(Tool):
+    name: str = "submit_final_result"
+    description: str = """
+    Submit the final result to the agent. The user will not see your response if you do not use this tool to submit.
+    This should only be called once, at the end of the conversation. Calling it will end the conversation.
+    You should provide the final result as a string.
+    """.strip()
+    input_arguments: dict[str, Any] = {
+        "final_result": {
+            "type": "string",
+            "description": "The final result to submit to the agent",
+        }
+    }
+    required_arguments: list[str] = ["final_result"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    async def call_tool(
+        self, arguments: dict[str, Any], *args, **kwargs
+    ) -> dict[str, Any]:
+        final_result = arguments.get("final_result")
+        if not final_result:
+            return {"success": False, "result": "Final result is required"}
+
+        return {"success": True, "result": final_result}
+
+
 class GoogleWebSearch(Tool):
     name: str = "google_web_search"
     description: str = "Search the web for information"

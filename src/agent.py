@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import traceback
 import uuid
 from abc import ABC
@@ -95,38 +94,6 @@ class Agent(ABC):
 
         # hijack llm logger
         self.llm.logger = agent_logger
-
-    async def _find_final_answer(self, response_text: str) -> str | None:
-        """
-        Search through the response text for the presence of 'FINAL ANSWER:', and if its present,
-        extract the answer and any sources
-        """
-        final_answer_pattern = re.compile(r"FINAL ANSWER:", re.IGNORECASE)
-
-        if isinstance(response_text, str) and final_answer_pattern.search(
-            response_text
-        ):
-            final_answer_match = re.search(
-                r"FINAL ANSWER:(.*?)(?:\{\"sources\"|\Z)",
-                response_text,
-                re.DOTALL,
-            )
-            sources_match = re.search(r"(\{\"sources\".*\})", response_text, re.DOTALL)
-
-            answer_text = (
-                final_answer_match.group(1).strip() if final_answer_match else ""
-            )
-
-            sources_text = sources_match.group(1) if sources_match else ""
-
-            final_answer = answer_text
-            if sources_text:
-                final_answer = f"{answer_text}\n\n{sources_text}"
-
-            agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
-            return final_answer
-
-        return None
 
     async def _process_tool_calls(
         self,
@@ -305,8 +272,6 @@ class Agent(ABC):
             total_cost=response.metadata.cost.total,
         )
 
-        final_answer = None
-
         # Log the thinking content if available
         if reasoning_text:
             agent_logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
@@ -319,11 +284,22 @@ class Agent(ABC):
             )
             self.messages.extend(tool_results)
 
-        elif response_text:
-            # Look for the text "FINAL ANSWER:" in the response text
-            final_answer = await self._find_final_answer(response_text)
+            submit_final_result_tool_result = next(
+                (
+                    tool_result
+                    for tool_result in tool_results
+                    if tool_result.tool_call.name == "submit_final_result"
+                ),
+                None,
+            )
+            if submit_final_result_tool_result:
+                final_answer = json.loads(submit_final_result_tool_result.result)[
+                    "result"
+                ]
+                agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
+                return final_answer, turn_metadata
 
-        return final_answer, turn_metadata
+        return None, turn_metadata
 
     async def run(
         self, question: str, session_id: str | None = None
