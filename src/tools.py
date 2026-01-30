@@ -199,27 +199,27 @@ class EDGARSearch(Tool):
     name: str = "edgar_search"
     description: str = """
     Search the EDGAR Database through the SEC API.
-    You should provide a query, a list of form types, a list of CIKs, a start date, an end date, a page number, and a top N results.
+    You should provide a query, a start date, an end date, a page number, and a top N results. Optionally provide a list of form types, and a list of CIKs.
     The results are returned as a list of dictionaries, each containing the metadata for a filing. It does not contain the full text of the filing.
     """.strip()
     input_arguments: dict[str, Any] = {
         "query": {
             "type": "string",
-            "description": "The keyword or phrase to search, such as 'substantial doubt' OR 'material weakness'",
+            "description": 'The case-insensitive search-term or phrase to search the contents of fillings and their attachments. This can be a single word, phrase, or combination of words and phrases. Supported search features include wildcards (*), Boolean operators (OR, NOT), and exact phrase matching by enclosing phrases in quotation marks ("exact phrase"). By default, all terms are joined by an implicit AND operator.',
         },
         "form_types": {
             "type": "array",
-            "description": "Limits search to specific SEC form types (e.g., ['8-K', '10-Q']) list of strings. Default is None (all form types)",
+            "description": "Limits search to specific EDGAR form types (e.g., ['8-K', '10-Q']) list of strings. Default: all form types",
             "items": {"type": "string"},
         },
         "ciks": {
             "type": "array",
-            "description": "Filters results to filings by specified CIKs, type list of strings. Default is None (all filers).",
+            "description": 'Filters results to filings from specified CIKs, type list of strings. Leading zeros are optional but may be included. Example: [ "0001811414", "1318605" ]. Default: all CIKs',
             "items": {"type": "string"},
         },
         "start_date": {
             "type": "string",
-            "description": "Start date for the search range in yyyy-mm-dd format. Used with endDate to define the date range. Example: '2024-01-01'. Default is 30 days ago",
+            "description": "Start date for the search range in yyyy-mm-dd format. Used in combination with endDate to define the date range. Example: '2024-01-01'. Default is 30 days ago",
         },
         "end_date": {
             "type": "string",
@@ -227,7 +227,7 @@ class EDGARSearch(Tool):
         },
         "page": {
             "type": "string",
-            "description": "Pagination for results. Default is '1'",
+            "description": "Used for pagination. Each request returns 100 matching filings. Increase the page number to retrieve the next set of 100 filings. Example: 3 retrieves the third page. Default: 1",
         },
         "top_n_results": {
             "type": "integer",
@@ -236,11 +236,8 @@ class EDGARSearch(Tool):
     }
     required_arguments: list[str] = [
         "query",
-        "form_types",
-        "ciks",
         "start_date",
         "end_date",
-        "page",
         "top_n_results",
     ]
 
@@ -261,12 +258,12 @@ class EDGARSearch(Tool):
     async def _execute_search(
         self,
         query: str,
-        form_types: list[str] | str,
-        ciks: list[str] | str,
         start_date: str,
         end_date: str,
-        page: int,
         top_n_results: int,
+        page: int | None = None,
+        form_types: list[str] | str | None = None,
+        ciks: list[str] | str | None = None,
     ) -> list[str]:
         """
         Search the EDGAR Database through the SEC API asynchronously.
@@ -309,14 +306,18 @@ class EDGARSearch(Tool):
         if end_date > MAX_END_DATE:
             end_date = MAX_END_DATE
 
-        payload = {
+        payload: dict[str, str | int | list[str]] = {
             "query": query,
-            "formTypes": form_types,
-            "ciks": ciks,
             "startDate": start_date,
             "endDate": end_date,  # This will always be at most "2025-04-07"
-            "page": page,
         }
+
+        if page:
+            payload["page"] = page
+        if form_types:
+            payload["formTypes"] = form_types
+        if ciks:
+            payload["ciks"] = ciks
 
         headers = {
             "Content-Type": "application/json",
