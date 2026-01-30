@@ -10,13 +10,13 @@ from dotenv import load_dotenv
 from model_library.base import LLMConfig
 from tqdm.asyncio import tqdm
 
-from agent import Metadata, agent_logger
-from get_agent import Parameters, get_agent
-from logger import (
+from .agent import Metadata, agent_logger
+from .get_agent import Parameters, get_agent
+from .logger import (
     setup_question_logging,
     teardown_question_logging,
 )
-from tools import tool_logger
+from .tools import tool_logger
 
 
 def create_run_directory(model_name: str) -> str:

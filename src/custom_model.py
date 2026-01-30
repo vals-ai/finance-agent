@@ -5,12 +5,13 @@ from model_library.base import LLMConfig
 from model_library.registry_utils import get_registry_model
 from vals.sdk.types import OutputObject  # pyright: ignore
 
-from agent import Agent, agent_logger
-from tools import (
+from .agent import Agent, agent_logger
+from .tools import (
     EDGARSearch,
     TavilyWebSearch,
     ParseHtmlPage,
     RetrieveInformation,
+    SubmitFinalResult,
     Tool,
     tool_logger,
 )
@@ -47,6 +48,7 @@ async def get_custom_model(
         "retrieve_information": RetrieveInformation(),
         "parse_html_page": ParseHtmlPage(),
         "edgar_search": EDGARSearch(),
+        "submit_final_result": SubmitFinalResult(),
     }
 
     async def custom_call(test_input: str):
@@ -69,7 +71,7 @@ async def get_custom_model(
             out_tokens=metadata.total_tokens.total_output_tokens,
             duration_seconds=metadata.total_duration_seconds,
             cost=metadata.total_cost,
-            output_context=metadata,
+            output_context=metadata.model_dump(),
         )
 
     return custom_call

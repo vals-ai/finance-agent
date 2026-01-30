@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any, override
+from typing import Any
 
 import aiohttp
 import backoff
@@ -12,7 +12,7 @@ from model_library.base import LLM, ToolBody, ToolDefinition
 from pydantic import computed_field
 from tavily import AsyncTavilyClient
 
-from logger import VERBOSE, get_logger
+from .logger import VERBOSE, get_logger
 
 tool_logger = get_logger(__name__)
 
@@ -148,9 +148,9 @@ class SubmitFinalResult(Tool):
     ) -> dict[str, Any]:
         final_result = arguments.get("final_result")
         if not final_result:
-            return {"success": False, "result": "Final result is required"}
+            raise ValueError("Final result is required - the 'final_result' argument must be provided and non-empty")
 
-        return {"success": True, "result": final_result}
+        return {"result": final_result}
 
 
 class TavilyWebSearch(Tool):
@@ -250,7 +250,6 @@ class TavilyWebSearch(Tool):
 
         return response.get("results", [])
 
-    @override
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:
@@ -525,7 +524,6 @@ class ParseHtmlPage(Tool):
 
         return tool_result
 
-    @override
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:

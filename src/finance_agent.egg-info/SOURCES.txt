@@ -1,0 +1,17 @@
+LICENSE
+README.md
+pyproject.toml
+src/__init__.py
+src/agent.py
+src/custom_model.py
+src/get_agent.py
+src/logger.py
+src/prompt.py
+src/run_agent.py
+src/tools.py
+src/utils.py
+src/finance_agent.egg-info/PKG-INFO
+src/finance_agent.egg-info/SOURCES.txt
+src/finance_agent.egg-info/dependency_links.txt
+src/finance_agent.egg-info/requires.txt
+src/finance_agent.egg-info/top_level.txt

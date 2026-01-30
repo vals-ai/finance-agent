@@ -23,7 +23,7 @@ COST_KEYS = [
 ]
 
 if TYPE_CHECKING:
-    from agent import Metadata
+    from .agent import Metadata
 
 
 def _merge_statistics(metadata: "Metadata") -> "Metadata":

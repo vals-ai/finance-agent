@@ -1,0 +1,8 @@
+aiohttp>=3.13.2
+backoff>=2.2.1
+beautifulsoup4>=4.14.3
+dotenv>=0.9.9
+requests>=2.32.5
+sec-api>=1.0.32
+model-library==0.1.8
+tavily==1.1.0

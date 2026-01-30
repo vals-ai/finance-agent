@@ -19,10 +19,10 @@ from model_library.base import (
 from model_library.exceptions import MaxContextWindowExceededError
 from pydantic import BaseModel
 
-from logger import get_logger
-from prompt import INSTRUCTIONS_PROMPT
-from tools import Tool
-from utils import _merge_statistics
+from .logger import get_logger
+from .prompt import INSTRUCTIONS_PROMPT
+from .tools import Tool
+from .utils import _merge_statistics
 
 agent_logger = get_logger(__name__)
 
@@ -293,18 +293,25 @@ class Agent(ABC):
                 None,
             )
             if submit_final_result_tool_result:
-                final_answer = json.loads(submit_final_result_tool_result.result)[
-                    "result"
-                ]
-                agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
-                return final_answer, turn_metadata
+                try:
+                    final_answer = json.loads(submit_final_result_tool_result.result)[
+                        "result"
+                    ]
+                    agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
+                    return final_answer, turn_metadata
+                except (json.JSONDecodeError, KeyError) as e:
+                    agent_logger.error(f"\033[1;31m[ERROR]\033[0m Failed to parse submit_final_result: {e}")
+                    agent_logger.error(f"\033[1;31m[DEBUG]\033[0m Result type: {type(submit_final_result_tool_result.result)}")
+                    agent_logger.error(f"\033[1;31m[DEBUG]\033[0m Result repr: {repr(submit_final_result_tool_result.result)}")
+                    agent_logger.error(f"\033[1;31m[DEBUG]\033[0m Result length: {len(submit_final_result_tool_result.result) if hasattr(submit_final_result_tool_result.result, '__len__') else 'N/A'}")
+                    raise
 
         return None, turn_metadata
 
     async def run(
         self,
         question: str,
-        question_dir: str,
+        question_dir: str | None = None, 
         session_id: str | None = None,
     ) -> tuple[str, Metadata]:
         """

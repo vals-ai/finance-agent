@@ -2,8 +2,8 @@ from model_library.base import LLMConfig
 from model_library.registry_utils import get_registry_model
 from pydantic import BaseModel
 
-from agent import Agent
-from tools import (
+from .agent import Agent
+from .tools import (
     EDGARSearch,
     TavilyWebSearch,
     ParseHtmlPage,
