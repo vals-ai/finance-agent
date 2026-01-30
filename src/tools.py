@@ -126,9 +126,11 @@ class Tool(ABC):
 class SubmitFinalResult(Tool):
     name: str = "submit_final_result"
     description: str = """
-    Submit the final result to the agent. The user will not see your response if you do not use this tool to submit.
-    This should only be called once, at the end of the conversation. Calling it will end the conversation.
-    You should provide the final result as a string.
+    Submits the final answer to the user. You should include your final answer, as well as any necessary 
+    reasoning, justification, calculations, and explanation. Finally, you should provide any sources used to answer the question.
+    
+    You MUST use this tool to submit your final result. The user will not see your response if you do not use this tool to submit.
+    You will not be able to continue working after this tool is called; the conversation will be ended.
     """.strip()
     input_arguments: dict[str, Any] = {
         "final_result": {
@@ -153,22 +155,35 @@ class SubmitFinalResult(Tool):
 
 class TavilyWebSearch(Tool):
     name: str = "web_search"
-    description: str = "Search the web for information. This returns the 10 most relevant results for the query. Each result has a url, a title, and one snippet."
+    description: str = "Search the public internet for information. Each result will contain a url, a title, and one excerpt taken directly from the page."
     input_arguments: dict[str, Any] = {
         "search_query": {
             "type": "string",
             "description": "The query to search for",
-        }
+        },
+        "start_date": {
+            "type": "string",
+            "description": "(optional) The start date for the search range for in the format YYYY-MM-DD",
+        },
+        "end_date": {
+            "type": "string",
+            "description": "(optional) The end date to search range in the format YYYY-MM-DD. If the value is later than 2025-04-07, it will be set to 2025-04-07.",
+        },
+        "number_of_results": {
+            "type": "integer",
+            "description": "(optional) The number of search results to return.",
+            "maximum": 20,
+            "minimum": 1,
+            "default": 10,
+        },
     }
     required_arguments: list[str] = ["search_query"]
 
     def __init__(
         self,
-        top_n_results: int = 10,
         tavily_api_key: str | None = None,
     ):
         super().__init__()
-        self.top_n_results: int = top_n_results
         if not tavily_api_key:
             tavily_api_key = os.getenv("TAVILY_API_KEY")
         if not tavily_api_key:
@@ -177,22 +192,60 @@ class TavilyWebSearch(Tool):
         self.client = AsyncTavilyClient(api_key=tavily_api_key)
 
     @retry_on_429
-    async def _execute_search(self, search_query: str) -> list[dict[str, Any]]:
+    async def _execute_search(
+        self,
+        search_query: str,
+        start_date: str | None = None,
+        end_date: str = MAX_END_DATE,
+        number_of_results: int = 10,
+    ) -> list[dict[str, Any]]:
         """
         Search the web for information using Tavily.
 
         Args:
             search_query (str): The query to search for
+            start_date (str | None): The start date for the search range for in the format YYYY-MM-DD
+            end_date (str): The end date to search range in the format YYYY-MM-DD
+            number_of_results (int): The number of search results to return.
 
         Returns:
             list[dict[str, Any]]: A list of results from Tavily
         """
+        # Verify start_date and end_date are well formatted as dates in YYYY-MM-DD
+        DATE_REGEX = r"^\d{4}-\d{2}-\d{2}$"
+
+        kwargs = {}
+
+        if end_date:
+            if not re.match(DATE_REGEX, end_date):
+                raise ValueError(
+                    f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD."
+                )
+
+            if end_date > MAX_END_DATE:
+                end_date = MAX_END_DATE
+
+        if start_date:
+            if not re.match(DATE_REGEX, start_date):
+                raise ValueError(
+                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
+                )
+            if start_date > MAX_END_DATE:
+                start_date = MAX_END_DATE
+            if start_date > end_date:
+                raise ValueError(
+                    f"Parameter start_date '{start_date}' was set to a date that is later than end_date '{end_date}'"
+                )
+
+            kwargs["start_date"] = start_date
+
         response = await self.client.search(
             search_depth="fast",
             end_date=MAX_END_DATE,
-            max_results=self.top_n_results,
+            max_results=number_of_results,
             chunks_per_source=1,
             query=search_query,
+            **kwargs,
         )
 
         return response.get("results", [])
@@ -209,46 +262,48 @@ class EDGARSearch(Tool):
     name: str = "edgar_search"
     description: str = """
     Search the EDGAR Database through the SEC API.
-    You should provide a query, a start date, an end date, a page number, and a top N results. Optionally provide a list of form types, and a list of CIKs.
+    You should provide a search query. You can also optionally provide a start date, an end date, a page number, top N results, a list of form types, and/or a list of CIKs.
     The results are returned as a list of dictionaries, each containing the metadata for a filing. It does not contain the full text of the filing.
     """.strip()
     input_arguments: dict[str, Any] = {
-        "query": {
+        "search_query": {
             "type": "string",
             "description": 'The case-insensitive search-term or phrase to search the contents of fillings and their attachments. This can be a single word, phrase, or combination of words and phrases. Supported search features include wildcards (*), Boolean operators (OR, NOT), and exact phrase matching by enclosing phrases in quotation marks ("exact phrase"). By default, all terms are joined by an implicit AND operator.',
         },
         "form_types": {
             "type": "array",
-            "description": "Limits search to specific EDGAR form types (e.g., ['8-K', '10-Q']) list of strings. Default: all form types",
+            "description": "(optional) Limits search to specific EDGAR form types (e.g., ['8-K', '10-Q']) list of strings. Default: all form types",
             "items": {"type": "string"},
         },
         "ciks": {
             "type": "array",
-            "description": 'Filters results to filings from specified CIKs, type list of strings. Leading zeros are optional but may be included. Example: [ "0001811414", "1318605" ]. Default: all CIKs',
+            "description": '(optional) Filters results to filings from specified CIKs, type list of strings. Leading zeros are optional but may be included. Example: [ "0001811414", "1318605" ]. Default: all CIKs',
             "items": {"type": "string"},
         },
         "start_date": {
             "type": "string",
-            "description": "Start date for the search range in yyyy-mm-dd format. Used in combination with endDate to define the date range. Example: '2024-01-01'. Default is 30 days ago",
+            "description": "(optional) Start date for the search range in yyyy-mm-dd format. If the value is a date that is later than 2025-04-07, it will be set to 2025-04-07.",
+            "default": "1900-01-01",
         },
         "end_date": {
             "type": "string",
-            "description": "End date for the search range, in the same format as startDate. Default is today",
+            "description": "(optional) End date for the search range, in the same format as startDate. If the value is a date that is later than 2025-04-07, it will be set to 2025-04-07.",
+            "default": MAX_END_DATE,
         },
         "page": {
             "type": "string",
-            "description": "Used for pagination. Each request returns 100 matching filings. Increase the page number to retrieve the next set of 100 filings. Example: 3 retrieves the third page. Default: 1",
+            "description": "(optional) Used for pagination. Each page contains up to 100 matching filings. Increase the page number to retrieve the next set of 100 filings. Example: 3 retrieves the third page. Default: 1",
+            "default": 1,
         },
         "top_n_results": {
             "type": "integer",
-            "description": "The top N results to return after the query. Useful if you are not sure the result you are loooking for is ranked first after your query.",
+            "description": "(optional) Return only the first N results out of 100 from the page. If not provided, all 100 results will be returned. E.g. if page is 2, and number_of_results is 10, you will receive results 100 to 110.",
+            "maximum": 100,
+            "default": 100,
         },
     }
     required_arguments: list[str] = [
         "query",
-        "start_date",
-        "end_date",
-        "top_n_results",
     ]
 
     def __init__(
@@ -267,11 +322,11 @@ class EDGARSearch(Tool):
     @retry_on_429
     async def _execute_search(
         self,
-        query: str,
-        start_date: str,
-        end_date: str,
-        top_n_results: int,
-        page: int | None = None,
+        search_query: str,
+        start_date: str = "1900-01-01",
+        end_date: str = MAX_END_DATE,
+        top_n_results: int = 100,
+        page: int = 1,
         form_types: list[str] | str | None = None,
         ciks: list[str] | str | None = None,
     ) -> list[str]:
@@ -279,7 +334,7 @@ class EDGARSearch(Tool):
         Search the EDGAR Database through the SEC API asynchronously.
 
         Args:
-            query (str): The keyword or phrase to search
+            search_query (str): The keyword or phrase to search
             form_types (list[str]): List of form types to search
             ciks (list[str]): List of CIKs to filter by
             start_date (str): Start date for the search range in yyyy-mm-dd format
@@ -291,41 +346,47 @@ class EDGARSearch(Tool):
             list[str]: A list of filing results
         """
 
-        # Parse form_types if it's a string representation of a JSON array
-        if (
-            isinstance(form_types, str)
-            and form_types.startswith("[")
-            and form_types.endswith("]")
-        ):
-            try:
-                form_types = json.loads(form_types.replace("'", '"'))
-            except json.JSONDecodeError:
-                # Fallback to simple parsing if JSON parsing fails
-                form_types = [
-                    item.strip(" \"'") for item in form_types[1:-1].split(",")
-                ]
+        if form_types is not None and not isinstance(form_types, list):
+            raise ValueError(
+                f"The parameter form_types must be a list if provided. Was of type {type(form_types)}"
+            )
 
-        # Parse ciks if it's a string representation of a JSON array
-        if isinstance(ciks, str) and ciks.startswith("[") and ciks.endswith("]"):
-            try:
-                ciks = json.loads(ciks.replace("'", '"'))
-            except json.JSONDecodeError:
-                # Fallback to simple parsing if JSON parsing fails
-                ciks = [item.strip(" \"'") for item in ciks[1:-1].split(",")]  #
+        if ciks is not None and not isinstance(ciks, list):
+            raise ValueError(
+                f"The parameterciks must be an list if provided. Was of type {type(ciks)}"
+            )
+
+        # Verify start_date and end_date are well formatted as dates (yyyy-mm-dd)
+        date_pattern = r"^\d{4}-\d{2}-\d{2}$"
+        if not re.match(date_pattern, start_date):
+            raise ValueError(f"start_date '{start_date}' is not in yyyy-mm-dd format")
+
+        if not re.match(date_pattern, end_date):
+            raise ValueError(f"end_date '{end_date}' is not in yyyy-mm-dd format")
+
+        if start_date > MAX_END_DATE:
+            start_date = MAX_END_DATE
 
         if end_date > MAX_END_DATE:
             end_date = MAX_END_DATE
 
+        if start_date > end_date:
+            raise ValueError(
+                f"Parameter start_date '{start_date}' was set to a date that is later than end_date '{end_date}'"
+            )
+
         payload: dict[str, str | int | list[str]] = {
-            "query": query,
+            "query": search_query,
             "startDate": start_date,
             "endDate": end_date,  # This will always be at most "2025-04-07"
         }
 
         if page:
             payload["page"] = page
+
         if form_types:
             payload["formTypes"] = form_types
+
         if ciks:
             payload["ciks"] = ciks
 
@@ -341,7 +402,10 @@ class EDGARSearch(Tool):
                 response.raise_for_status()  # This will raise ClientResponseError
                 result = await response.json()
 
-        return result.get("filings", [])[: int(top_n_results)]
+        results = result.get("filings", [])
+        results = results[: int(top_n_results)]
+
+        return results
 
     async def call_tool(
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
@@ -359,9 +423,12 @@ class EDGARSearch(Tool):
 class ParseHtmlPage(Tool):
     name: str = "parse_html_page"
     description: str = """
-        Parse an HTML page. This tool is used to parse the HTML content of a page and saves the content outside of the conversation to avoid context window issues.
-        You should provide both the URL of the page to parse, as well as the key you want to use to save the result in the agent's data structure.
-        The data structure is a dictionary.
+        This tool is used to parse the contents of an HTML page and save it to the agent's data storage system. 
+
+        The tool will retrieve the HTML page from the URL provided, then parse it from HTML to plain text. 
+        Finally, it will save it to the agent's data storage system under the key provided.
+        
+        You can use the retrieve_information tool to later retrieve information about the stored page.
     """.strip()
 
     input_arguments: dict[str, Any] = {
@@ -425,13 +492,13 @@ class ParseHtmlPage(Tool):
         return text
 
     async def _save_tool_output(
-        self, output: list[str], key: str, data_storage: dict[str, Any]
+        self, output: str, key: str, data_storage: dict[str, Any]
     ) -> str:
         """
         Save the parsed HTML text to the data_storage dictionary.
 
         Args:
-            output (list[str]): The parsed text output from call_tool
+            output (str): The parsed text output from call_tool
             data_storage (dict): The dictionary to save the results to
         """
         if not output:
@@ -469,7 +536,7 @@ class ParseHtmlPage(Tool):
             arguments (dict): Dictionary containing 'url' and 'key'
 
         Returns:
-            list[str]: A list containing the parsed text
+            str: The parsed text content
         """
         url = arguments.get("url", "")
         if not url:
@@ -481,41 +548,56 @@ class ParseHtmlPage(Tool):
         text_output = await self._parse_html_page(url)
         tool_result = await self._save_tool_output(text_output, key, data_storage)
 
+        # Returns str instead of dict[str, Any] - the base class __call__ wrapper handles wrapping this in a dict
         return tool_result  # pyright: ignore
 
 
 class RetrieveInformation(Tool):
     name: str = "retrieve_information"
     description: str = """
-    Retrieve information from the conversation's data structure (dict) and allow character range extraction.
+    This tool allows you to retrieve data from previously saved documents from the agent's data storage system, by applying an LLM prompt to the stored document.
+
+    To use the tool, you will need to provide a prompt. This prompt will include both the query to be sent to the LLM, 
+    as well as the keys of files you have previously saved to the data storage system.
     
-    IMPORTANT: Your prompt MUST include at least one key from the data storage using the exact format: {{key_name}}
-    
-    For example, if you want to analyze data stored under the key "financial_report", your prompt should look like:
+    For example, if you want to analyze data stored under the key "financial_report", your prompt should look like the following:
     "Analyze the following financial report and extract the revenue figures: {{financial_report}}"
     
-    The {{key_name}} will be replaced with the actual content stored under that key before being sent to the LLM.
+    The {{key_name}} will be replaced with the full text of the document stored under that key before the query is sent.
+
+    IMPORTANT: Your prompt MUST include at least one key from the data storage using this exact format: {{key_name}}.
     If you don't use this exact format with double braces, the tool will fail to retrieve the information.
     
-    You can optionally specify character ranges for each document key to extract only portions of documents. That can be useful to avoid token limit errors or improve efficiency by selecting only part of the document.
-    For example, if "financial_report" contains "Annual Report 2023" and you specify a range [1, 5] for that key,
-    only "nnual" will be inserted into the prompt.
-    
-    The output is the result from the LLM that receives the prompt with the inserted data.
+    You can also optionally only pass *a portion* of each document to the LLM, rather than the entire document. This can be used to avoid token limit errors or improve efficiency.
+    To do so, use the input_character_ranges parameter to specify which portions of documents to extract.
+    For example, if "financial_report" contains "Annual Report 2023" and you specify:  [{"key": "financial_report", "start": 1, "end": 6}], then only "nnual" will be inserted into the prompt (characters 1 through 5, as end is exclusive).
     """.strip()
+
     input_arguments: dict[str, Any] = {
         "prompt": {
             "type": "string",
             "description": "The prompt that will be passed to the LLM. You MUST include at least one data storage key in the format {{key_name}} - for example: 'Summarize this 10-K filing: {{company_10k}}'. The content stored under each key will replace the {{key_name}} placeholder.",
         },
         "input_character_ranges": {
-            "type": "object",
-            "description": "A dictionary mapping document keys to their character ranges. Each range should be an array where the first element is the start index and the second element is the end index. Can be used to only read portions of documents. By default, the full document is used. To use the full document, set the range to an empty list [].",
-            "additionalProperties": {
-                "type": "array",
-                "items": {
-                    "type": "integer",
+            "type": "array",
+            "description": "An optional list of character range specifications for extracting only portions of documents. Each object should have 'key' (the document key), 'start' (start character index, inclusive), and 'end' (end character index, exclusive). By default, the full document is used if this parameter is not provided or if a key is not included in the list.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "The document key from data storage",
+                    },
+                    "start": {
+                        "type": "integer",
+                        "description": "The starting character index (inclusive)",
+                    },
+                    "end": {
+                        "type": "integer",
+                        "description": "The ending character index (exclusive)",
+                    },
                 },
+                "required": ["key", "start", "end"],
             },
         },
     }
@@ -531,44 +613,59 @@ class RetrieveInformation(Tool):
         self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
     ) -> dict[str, Any]:
         prompt: str = arguments["prompt"]
-        input_character_ranges = arguments.get("input_character_ranges", {})
+        input_character_ranges = arguments.get("input_character_ranges", [])
         if input_character_ranges is None:
-            input_character_ranges = {}
+            input_character_ranges = []
 
         # Verify that the prompt contains at least one placeholder in the correct format
         if not re.search(r"{{[^{}]+}}", prompt):
             raise ValueError(
-                "ERROR: Your prompt must include at least one key from data storage in the format {{key_name}}. Please try again with the correct format."
+                "ERROR: Your prompt must include at least one key from data storage in the format {{key_name}}. Please try again with the correct format. You can add documents to the data storage with parse_html_page."
             )
 
-        # Find all keys in the prompt
+        # Convert list of range objects to a dict for easier lookup
+        ranges_dict = {}
+        for range_spec in input_character_ranges:
+            if not isinstance(range_spec, dict):
+                raise ValueError(
+                    "ERROR: Each item in input_character_ranges must be an object with 'key', 'start', and 'end' fields."
+                )
+            if (
+                "key" not in range_spec
+                or "start" not in range_spec
+                or "end" not in range_spec
+            ):
+                raise ValueError(
+                    "ERROR: Each range specification must have 'key', 'start', and 'end' fields."
+                )
+            ranges_dict[range_spec["key"]] = (range_spec["start"], range_spec["end"])
+
         keys = re.findall(r"{{([^{}]+)}}", prompt)
+        keys_set = set(keys)
+
+        # Validate that all keys in input_character_ranges are referenced in the prompt
+        for range_key in ranges_dict.keys():
+            if range_key not in keys_set:
+                raise ValueError(
+                    f"ERROR: The key '{range_key}' is specified in input_character_ranges but is not referenced in the prompt. "
+                    f"Keys in prompt: {', '.join(keys_set) if keys_set else '(none)'}"
+                )
+
         formatted_data = {}
 
         # Apply character range to each document before substitution
         for key in keys:
             if key not in data_storage:
                 raise KeyError(
-                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
+                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}. Use the retrieve_information tool to add keys to the data storage."
                 )
 
-            # Extract the specified character range from the document if provided
             doc_content = data_storage[key]
 
-            if key in input_character_ranges:
-                char_range = input_character_ranges[key]
-                if len(char_range) == 0:
-                    formatted_data[key] = doc_content
-                elif len(char_range) != 2:
-                    raise ValueError(
-                        f"ERROR: The character range for key '{key}' must be an list with two elements or an empty list. Please try again with the correct format."
-                    )
-                else:
-                    start_idx = int(char_range[0])
-                    end_idx = int(char_range[1])
-                    formatted_data[key] = doc_content[start_idx:end_idx]
+            if key in ranges_dict:
+                start_idx, end_idx = ranges_dict[key]
+                formatted_data[key] = doc_content[start_idx:end_idx]
             else:
-                # Use the full document if no range is specified
                 formatted_data[key] = doc_content
 
         # Convert {{key}} format to Python string formatting
