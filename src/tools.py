@@ -620,7 +620,7 @@ class RetrieveInformation(Tool):
         # Verify that the prompt contains at least one placeholder in the correct format
         if not re.search(r"{{[^{}]+}}", prompt):
             raise ValueError(
-                "ERROR: Your prompt must include at least one key from data storage in the format {{key_name}}. Please try again with the correct format."
+                "ERROR: Your prompt must include at least one key from data storage in the format {{key_name}}. Please try again with the correct format. You can add documents to the data storage with parse_html_page."
             )
 
         # Convert list of range objects to a dict for easier lookup
@@ -657,7 +657,7 @@ class RetrieveInformation(Tool):
         for key in keys:
             if key not in data_storage:
                 raise KeyError(
-                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
+                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}. Use the retrieve_information tool to add keys to the data storage."
                 )
 
             doc_content = data_storage[key]
