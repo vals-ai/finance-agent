@@ -424,7 +424,7 @@ class ParseHtmlPage(Tool):
             data_storage (dict): The dictionary to save the results to
         """
         if not output:
-            raise ValueError("No output to save")
+            raise ValueError("HTML output was empty")
 
         tool_result = ""
         if key in data_storage:
