@@ -10,6 +10,7 @@ import backoff
 from bs4 import BeautifulSoup
 from model_library.base import LLM, ToolBody, ToolDefinition
 from pydantic import computed_field
+from tavily import AsyncTavilyClient
 
 from logger import VERBOSE, get_logger
 
@@ -150,9 +151,9 @@ class SubmitFinalResult(Tool):
         return {"success": True, "result": final_result}
 
 
-class GoogleWebSearch(Tool):
-    name: str = "google_web_search"
-    description: str = "Search the web for information"
+class TavilyWebSearch(Tool):
+    name: str = "web_search"
+    description: str = "Search the web for information. This returns the 10 most relevant results for the query. Each result has a url, a title, and one snippet."
     input_arguments: dict[str, Any] = {
         "search_query": {
             "type": "string",
@@ -164,58 +165,37 @@ class GoogleWebSearch(Tool):
     def __init__(
         self,
         top_n_results: int = 10,
-        serpapi_api_key: str | None = None,
+        tavily_api_key: str | None = None,
     ):
-        super().__init__(
-            self.name,
-            self.description,
-            self.input_arguments,
-            self.required_arguments,
-        )
+        super().__init__()
         self.top_n_results: int = top_n_results
-        if not serpapi_api_key:
-            serpapi_api_key = os.getenv("SERPAPI_API_KEY")
-        if not serpapi_api_key:
-            raise ValueError("SERPAPI_API_KEY is not set")
+        if not tavily_api_key:
+            tavily_api_key = os.getenv("TAVILY_API_KEY")
+        if not tavily_api_key:
+            raise ValueError("TAVILY_API_KEY is not set")
 
-        self.serpapi_api_key: str = serpapi_api_key
+        self.client = AsyncTavilyClient(api_key=tavily_api_key)
 
     @retry_on_429
-    async def _execute_search(self, search_query: str) -> list[str]:
+    async def _execute_search(self, search_query: str) -> list[dict[str, Any]]:
         """
-        Search the web for information using Google Search.
+        Search the web for information using Tavily.
 
         Args:
             search_query (str): The query to search for
 
         Returns:
-            list[str]: A list of results from Google Search
+            list[dict[str, Any]]: A list of results from Tavily
         """
-        if not self.serpapi_api_key:
-            raise ValueError("SERPAPI_API_KEY is not set")
-
-        # Google expect MM/DD/YYYY format
-        max_date_parts = MAX_END_DATE.split("-")
-        google_date_format = (
-            f"{max_date_parts[1]}/{max_date_parts[2]}/{max_date_parts[0]}"
+        response = await self.client.search(
+            search_depth="fast",
+            end_date=MAX_END_DATE,
+            max_results=self.top_n_results,
+            chunks_per_source=1,
+            query=search_query,
         )
 
-        params = {
-            "api_key": self.serpapi_api_key,
-            "engine": "google",
-            "q": search_query,
-            "num": self.top_n_results,
-            "tbs": f"cdr:1,cd_max:{google_date_format}",
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://serpapi.com/search.json", params=params
-            ) as response:
-                response.raise_for_status()  # This will raise ClientResponseError
-                results = await response.json()
-
-        return results.get("organic_results", [])
+        return response.get("results", [])
 
     @override
     async def call_tool(

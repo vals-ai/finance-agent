@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from agent import Agent
 from tools import (
     EDGARSearch,
-    GoogleWebSearch,
+    TavilyWebSearch,
     ParseHtmlPage,
     RetrieveInformation,
     SubmitFinalResult,
@@ -23,7 +23,7 @@ class Parameters(BaseModel):
 def get_agent(parameters: Parameters) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
     available_tools = {
-        "google_web_search": GoogleWebSearch,
+        "web_search": TavilyWebSearch,
         "retrieve_information": RetrieveInformation,
         "parse_html_page": ParseHtmlPage,
         "edgar_search": EDGARSearch,
