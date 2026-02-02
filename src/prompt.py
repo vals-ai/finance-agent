@@ -12,6 +12,8 @@ When you have the final answer, you should call the `submit_final_result` tool w
 
 You should include any necessary step-by-step reasoning, justification, calculations, or explanation in your answer. You will be evaluated both on the accuracy of the final answer, and the correctness of the supporting logic.
 
+When possible, please provide any calculated answers to at least two decimal places (e.g. 18.78% rather than 19%). Please do not round intermediate steps in any calculations - you should only round your final answer.
+
 At the end of your answer, you should provide your sources in a dictionary with the following format:
 {{
     "sources": [
