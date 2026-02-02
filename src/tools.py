@@ -3,16 +3,16 @@ import os
 import re
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any, override
+from typing import Any
 
 import aiohttp
 import backoff
 from bs4 import BeautifulSoup
+from logger import VERBOSE, get_logger
 from model_library.base import LLM, ToolBody, ToolDefinition
 from pydantic import computed_field
 from tavily import AsyncTavilyClient
-
-from logger import VERBOSE, get_logger
+from typing_extensions import override
 
 tool_logger = get_logger(__name__)
 
@@ -20,11 +20,7 @@ MAX_END_DATE = "2025-04-07"
 
 
 def is_429(exception: Exception) -> bool:
-    is429 = (
-        isinstance(exception, aiohttp.ClientResponseError)
-        and exception.status == 429
-        or "429" in str(exception)
-    )
+    is429 = isinstance(exception, aiohttp.ClientResponseError) and exception.status == 429 or "429" in str(exception)
     if is429:
         tool_logger.error(f"429 error: {exception}")
     return is429
@@ -78,9 +74,7 @@ class Tool(ABC):
         super().__init__()
 
     @abstractmethod
-    async def call_tool(
-        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
-    ) -> dict[str, Any]: ...
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]: ...
 
     async def __call__(
         self,
@@ -92,16 +86,12 @@ class Tool(ABC):
         Wrapper function to call the subclass' call_tool method
         """
         formatted_args = json.dumps(arguments, indent=2, default=str)
-        tool_logger.info(
-            f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}"
-        )
+        tool_logger.info(f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}")
 
         try:
             tool_result = await self.call_tool(arguments, data_storage, llm)
             formatted_result = json.dumps(tool_result, indent=2, default=str)
-            tool_logger.info(
-                f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}"
-            )
+            tool_logger.info(f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}")
             if self.name == "retrieve_information":
                 return {
                     "success": True,
@@ -117,9 +107,7 @@ class Tool(ABC):
                     f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}\nTraceback: {traceback.format_exc()}"
                 )
             else:
-                tool_logger.warning(
-                    f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}"
-                )
+                tool_logger.warning(f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}")
             return {"success": False, "result": error_msg}
 
 
@@ -143,9 +131,7 @@ class SubmitFinalResult(Tool):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-    async def call_tool(
-        self, arguments: dict[str, Any], *args, **kwargs
-    ) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
         final_result = arguments.get("final_result")
         if not final_result:
             return {"success": False, "result": "Final result is required"}
@@ -218,18 +204,14 @@ class TavilyWebSearch(Tool):
 
         if end_date:
             if not re.match(DATE_REGEX, end_date):
-                raise ValueError(
-                    f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD."
-                )
+                raise ValueError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 
             if end_date > MAX_END_DATE:
                 end_date = MAX_END_DATE
 
         if start_date:
             if not re.match(DATE_REGEX, start_date):
-                raise ValueError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
-                )
+                raise ValueError(f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
             if start_date > MAX_END_DATE:
                 start_date = MAX_END_DATE
             if start_date > end_date:
@@ -251,9 +233,7 @@ class TavilyWebSearch(Tool):
         return response.get("results", [])
 
     @override
-    async def call_tool(
-        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
-    ) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
         results = await self._execute_search(**arguments)
         return results
 
@@ -347,14 +327,10 @@ class EDGARSearch(Tool):
         """
 
         if form_types is not None and not isinstance(form_types, list):
-            raise ValueError(
-                f"The parameter form_types must be a list if provided. Was of type {type(form_types)}"
-            )
+            raise ValueError(f"The parameter form_types must be a list if provided. Was of type {type(form_types)}")
 
         if ciks is not None and not isinstance(ciks, list):
-            raise ValueError(
-                f"The parameterciks must be an list if provided. Was of type {type(ciks)}"
-            )
+            raise ValueError(f"The parameterciks must be an list if provided. Was of type {type(ciks)}")
 
         # Verify start_date and end_date are well formatted as dates (yyyy-mm-dd)
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
@@ -396,9 +372,7 @@ class EDGARSearch(Tool):
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.sec_api_url, json=payload, headers=headers
-            ) as response:
+            async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
                 response.raise_for_status()  # This will raise ClientResponseError
                 result = await response.json()
 
@@ -407,9 +381,7 @@ class EDGARSearch(Tool):
 
         return results
 
-    async def call_tool(
-        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
-    ) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
         try:
             return await self._execute_search(**arguments)
         except Exception as e:
@@ -471,9 +443,7 @@ class ParseHtmlPage(Tool):
                 else:
                     is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
                     if is_verbose:
-                        raise Exception(
-                            str(e) + "\nTraceback: " + traceback.format_exc()
-                        )
+                        raise Exception(str(e) + "\nTraceback: " + traceback.format_exc())
                     else:
                         raise Exception(str(e))
 
@@ -491,9 +461,7 @@ class ParseHtmlPage(Tool):
 
         return text
 
-    async def _save_tool_output(
-        self, output: str, key: str, data_storage: dict[str, Any]
-    ) -> str:
+    async def _save_tool_output(self, output: str, key: str, data_storage: dict[str, Any]) -> str:
         """
         Save the parsed HTML text to the data_storage dictionary.
 
@@ -506,11 +474,10 @@ class ParseHtmlPage(Tool):
 
         tool_result = ""
         if key in data_storage:
-            tool_result = "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
-        tool_result += (
-            f"SUCCESS: The result has been saved to the data storage under the key: {key}."
-            + "\n"
-        )
+            tool_result = (
+                "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
+            )
+        tool_result += f"SUCCESS: The result has been saved to the data storage under the key: {key}." + "\n"
 
         data_storage[key] = output
 
@@ -526,9 +493,7 @@ class ParseHtmlPage(Tool):
         return tool_result
 
     @override
-    async def call_tool(
-        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
-    ) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
         """
         Parse an HTML page and return its text content.
 
@@ -609,9 +574,7 @@ class RetrieveInformation(Tool):
             **kwargs,
         )
 
-    async def call_tool(
-        self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM
-    ) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
         prompt: str = arguments["prompt"]
         input_character_ranges = arguments.get("input_character_ranges", [])
         if input_character_ranges is None:
@@ -630,14 +593,8 @@ class RetrieveInformation(Tool):
                 raise ValueError(
                     "ERROR: Each item in input_character_ranges must be an object with 'key', 'start', and 'end' fields."
                 )
-            if (
-                "key" not in range_spec
-                or "start" not in range_spec
-                or "end" not in range_spec
-            ):
-                raise ValueError(
-                    "ERROR: Each range specification must have 'key', 'start', and 'end' fields."
-                )
+            if "key" not in range_spec or "start" not in range_spec or "end" not in range_spec:
+                raise ValueError("ERROR: Each range specification must have 'key', 'start', and 'end' fields.")
             ranges_dict[range_spec["key"]] = (range_spec["start"], range_spec["end"])
 
         keys = re.findall(r"{{([^{}]+)}}", prompt)

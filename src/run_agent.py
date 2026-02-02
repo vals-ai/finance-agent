@@ -6,17 +6,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-from model_library.base import LLMConfig
-from tqdm.asyncio import tqdm
-
 from agent import Metadata, agent_logger
+from dotenv import load_dotenv
 from get_agent import Parameters, get_agent
 from logger import (
     setup_question_logging,
     teardown_question_logging,
 )
+from model_library.base import LLMConfig
 from tools import tool_logger
+from tqdm.asyncio import tqdm
 
 
 def create_run_directory(model_name: str) -> str:
@@ -85,21 +84,15 @@ async def run_tests_parallel(
 
     tasks = [process_question(question, i + 1) for i, question in enumerate(questions)]
 
-    results: list[tuple[str, Metadata]] = await tqdm.gather(
-        *tasks, desc="Processing questions"
-    )
+    results: list[tuple[str, Metadata]] = await tqdm.gather(*tasks, desc="Processing questions")
 
     formatted_results = []
     for i, (question, result) in enumerate(zip(questions, results)):
         result = result[0], result[1].model_dump()
         if isinstance(result, Exception):
-            formatted_results.append(
-                {"question": question, "success": False, "error": str(result)}
-            )
+            formatted_results.append({"question": question, "success": False, "error": str(result)})
         else:
-            formatted_results.append(
-                {"question": question, "success": True, "result": result}
-            )
+            formatted_results.append({"question": question, "success": True, "result": result})
 
     if save_results:
         output_file = os.path.join(run_dir, "results.json")
@@ -113,9 +106,7 @@ VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_s
 
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description="Run the harness for the finance agent benchmark"
-    )
+    parser = argparse.ArgumentParser(description="Run the harness for the finance agent benchmark")
     parser.add_argument(
         "--max-tokens",
         type=int,
@@ -135,9 +126,7 @@ async def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level",
     )
-    parser.add_argument(
-        "--questions", type=str, nargs="+", help="List of questions to process"
-    )
+    parser.add_argument("--questions", type=str, nargs="+", help="List of questions to process")
     parser.add_argument(
         "--model",
         type=str,
@@ -180,14 +169,12 @@ async def main():
 
     # Get questions from file if provided, otherwise use command line args
     if args.question_file:
-        with open(args.question_file, "r") as f:
+        with open(args.question_file) as f:
             questions = [line.strip() for line in f if line.strip()]
     elif args.questions:
         questions = args.questions
     else:
-        raise Exception(
-            "No questions provided. One of --question-file or --questions must be used."
-        )
+        raise Exception("No questions provided. One of --question-file or --questions must be used.")
 
     parameters = Parameters(
         model_name=args.model,
