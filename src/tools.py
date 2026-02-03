@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import traceback
@@ -74,24 +75,28 @@ class Tool(ABC):
         super().__init__()
 
     @abstractmethod
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]: ...
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]: ...
 
     async def __call__(
         self,
         arguments: dict[str, Any],
         data_storage: dict[str, Any],
         llm: LLM,
+        logger: logging.Logger | None = None,
     ) -> dict[str, Any]:
         """
         Wrapper function to call the subclass' call_tool method
         """
+        # Use provided logger or fall back to module-level default
+        log = logger or tool_logger
+
         formatted_args = json.dumps(arguments, indent=2, default=str)
-        tool_logger.info(f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}")
+        log.info(f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}")
 
         try:
-            tool_result = await self.call_tool(arguments, data_storage, llm)
+            tool_result = await self.call_tool(arguments, data_storage, llm, log)
             formatted_result = json.dumps(tool_result, indent=2, default=str)
-            tool_logger.info(f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}")
+            log.info(f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}")
             if self.name == "retrieve_information":
                 return {
                     "success": True,
@@ -103,11 +108,11 @@ class Tool(ABC):
             error_msg = str(e)
             if VERBOSE:
                 error_msg += f"\nTraceback: {traceback.format_exc()}"
-                tool_logger.warning(
+                log.warning(
                     f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}\nTraceback: {traceback.format_exc()}"
                 )
             else:
-                tool_logger.warning(f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}")
+                log.warning(f"\033[1;31m[TOOL: {self.name.upper()}]\033[0m Error: {e}")
             return {"success": False, "result": error_msg}
 
 
@@ -233,7 +238,7 @@ class TavilyWebSearch(Tool):
         return response.get("results", [])
 
     @override
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
         results = await self._execute_search(**arguments)
         return results
 
@@ -381,14 +386,15 @@ class EDGARSearch(Tool):
 
         return results
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+        log = logger or tool_logger
         try:
             return await self._execute_search(**arguments)
         except Exception as e:
             error_msh = f"SEC API error: {e}"
             if VERBOSE:
                 error_msh += f"\nTraceback: {traceback.format_exc()}"
-            tool_logger.error(error_msh)
+            log.error(error_msh)
             raise e
 
 
@@ -493,7 +499,7 @@ class ParseHtmlPage(Tool):
         return tool_result
 
     @override
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
         """
         Parse an HTML page and return its text content.
 
@@ -574,7 +580,7 @@ class RetrieveInformation(Tool):
             **kwargs,
         )
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
         prompt: str = arguments["prompt"]
         input_character_ranges = arguments.get("input_character_ranges", [])
         if input_character_ranges is None:
@@ -635,7 +641,7 @@ class RetrieveInformation(Tool):
                 f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
 
-        response = await llm.query(prompt)
+        response = await llm.query(prompt, query_logger=logger)
 
         return {
             "retrieval": response.output_text_str,

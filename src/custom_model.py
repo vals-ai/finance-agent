@@ -1,4 +1,6 @@
+import logging
 import traceback
+import uuid
 from typing import Any
 
 from agent import Agent, agent_logger
@@ -32,13 +34,15 @@ def create_override_config(**kwargs: object) -> LLMConfig:
 async def get_custom_model(
     model_name: str,
     parameters: dict[str, Any],
-    log_level: str = "WARNING",
+    log_level: str = "INFO",
     *_args: object,
     **_kwargs: object,
 ):
-    # set logging level
-    tool_logger.setLevel(log_level)
-    agent_logger.setLevel(log_level)
+    # set console logging level (file handlers stay at DEBUG)
+    for logger in [tool_logger, agent_logger]:
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+                handler.setLevel(log_level)
 
     max_turns = 50
     parameters["supports_batch"] = False
@@ -57,13 +61,25 @@ async def get_custom_model(
     question_counter = [0]  # Use list to allow mutation in closure
 
     async def custom_call(test_input: str):
-        # NOTE: cannot reuse agent as it keeps track of self.messages
-        agent = Agent(llm=llm, tools=tools, max_turns=max_turns)
-
         # Create question directory and setup logging
+        # Use unique question ID to avoid race conditions with parallel execution
+        question_id = str(uuid.uuid4())[:8]
         question_counter[0] += 1
         question_dir = create_question_directory(run_dir, question_counter[0])
-        setup_question_logging(question_dir, ["agent", "tools"])
+
+        # Use unique logger names per question to avoid cross-contamination
+        agent_logger_name = f"agent.{question_id}"
+        tools_logger_name = f"tools.{question_id}"
+        setup_question_logging(question_dir, [agent_logger_name, tools_logger_name])
+
+        # NOTE: cannot reuse agent as it keeps track of self.messages
+        agent = Agent(
+            llm=llm,
+            tools=tools,
+            max_turns=max_turns,
+            logger_name=agent_logger_name,
+            tools_logger_name=tools_logger_name,
+        )
 
         try:
             response, metadata = await agent.run(test_input, question_dir=question_dir)
@@ -75,7 +91,7 @@ async def get_custom_model(
                 "output_context": {"error": str(e), "traceback": error_traceback},
             }
         finally:
-            teardown_question_logging(question_dir)
+            teardown_question_logging(question_dir, [agent_logger_name, tools_logger_name])
 
         return OutputObject(
             llm_output=response,
