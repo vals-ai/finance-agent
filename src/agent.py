@@ -86,14 +86,19 @@ class Agent(ABC):
         llm: LLM,
         max_turns: int = 20,
         instructions_prompt: str = INSTRUCTIONS_PROMPT,
+        logger_name: str | None = None,
+        tools_logger_name: str | None = None,
     ):
         self.tools: dict[str, Tool] = tools
         self.llm: LLM = llm
         self.max_turns: int = max_turns
         self.instructions_prompt: str = instructions_prompt
 
-        # hijack llm logger
-        self.llm.logger = agent_logger
+        # Use instance-specific loggers if names provided, otherwise use module-level defaults
+        self.logger = get_logger(logger_name) if logger_name else agent_logger
+        self.tools_logger = get_logger(tools_logger_name) if tools_logger_name else None
+        # NOTE: Don't set self.llm.logger here - the LLM is shared across agents.
+        # Instead, pass query_logger to each llm.query() call.
 
     async def _process_tool_calls(
         self,
@@ -151,7 +156,7 @@ class Agent(ABC):
 
             # Call tools with appropriate arguments
             raw_tool_result = await self.tools[tool_name](
-                arguments, data_storage, self.llm
+                arguments, data_storage, self.llm, self.tools_logger
             )
 
             if tool_name == "retrieve_information":
@@ -191,7 +196,7 @@ class Agent(ABC):
 
         NOTE: This function is very rarely called, most models are able to complete the task within the context window.
         """
-        agent_logger.warning(
+        self.logger.warning(
             "Max Context Window Exceeded. "
             "Removing first model response from the stack, "
             "as well as all associated tool calls and results."
@@ -204,7 +209,7 @@ class Agent(ABC):
             self.messages.pop(1)
             removed_count += 1
 
-        agent_logger.info(f"Removed {removed_count} model response item(s)")
+        self.logger.info(f"Removed {removed_count} model response item(s)")
 
         # Remove all input items. 99% of the time, this will just be ToolResults
         # from the previous batch of inputs, but we need to remove all input items,
@@ -215,7 +220,7 @@ class Agent(ABC):
             input_item_count += 1
 
         if input_item_count > 0:
-            agent_logger.info(f"Removed {input_item_count} InputItem(s)")
+            self.logger.info(f"Removed {input_item_count} InputItem(s)")
 
     async def _process_turn(
         self, turn_count: int, data_storage: dict[str, Any]
@@ -230,23 +235,23 @@ class Agent(ABC):
         Returns:
             tuple: (final_answer, turn_metadata, should_continue)
         """
-        agent_logger.info(f"\033[1;34m[TURN {turn_count}]\033[0m")
+        self.logger.info(f"\033[1;34m[TURN {turn_count}]\033[0m")
 
         tool_definitions = [tool.tool_definition for tool in self.tools.values()]
-        agent_logger.info(
+        self.logger.info(
             f"\033[1;35m[TOOLS AVAILABLE]\033[0m {[tool.name for tool in tool_definitions]}"
         )
 
         try:
             response: QueryResult = await self.llm.query(
-                input=self.messages, tools=tool_definitions
+                input=self.messages, tools=tool_definitions, query_logger=self.logger
             )
         # raise these directly, rather than handling as ModelException
         except MaxContextWindowExceededError:
             raise
         except Exception as e:
-            agent_logger.critical(f"Error: {e}")
-            agent_logger.critical(f"Traceback: {traceback.format_exc()}")
+            self.logger.critical(f"Error: {e}")
+            self.logger.critical(f"Traceback: {traceback.format_exc()}")
             raise ModelException(e)
 
         self.messages = response.history
@@ -255,7 +260,7 @@ class Agent(ABC):
         reasoning_text = response.reasoning
         tool_calls: list[ToolCall] = response.tool_calls
 
-        agent_logger.info(
+        self.logger.info(
             f"\033[1;36m[TOOL CALLS RECEIVED]\033[0m {len(tool_calls)} tool calls: {[tc.name for tc in tool_calls]}"
         )
 
@@ -274,9 +279,9 @@ class Agent(ABC):
 
         # Log the thinking content if available
         if reasoning_text:
-            agent_logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
+            self.logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
         if response_text:
-            agent_logger.info(f"\033[1;33m[LLM RESPONSE]\033[0m {response_text}")
+            self.logger.info(f"\033[1;33m[LLM RESPONSE]\033[0m {response_text}")
 
         if tool_calls:
             tool_results = await self._process_tool_calls(
@@ -296,7 +301,7 @@ class Agent(ABC):
                 final_answer = json.loads(submit_final_result_tool_result.result)[
                     "result"
                 ]
-                agent_logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
+                self.logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
                 return final_answer, turn_metadata
 
         return None, turn_metadata
@@ -336,7 +341,7 @@ class Agent(ABC):
         initial_message = TextInput(text=initial_prompt)
         self.messages: list[InputItem] = [initial_message]
 
-        agent_logger.info(f"\033[1;34m[USER INSTRUCTIONS]\033[0m {initial_prompt}")
+        self.logger.info(f"\033[1;34m[USER INSTRUCTIONS]\033[0m {initial_prompt}")
 
         turn_count = 0
         final_answer = None
@@ -359,13 +364,13 @@ class Agent(ABC):
             except ModelException as e:
                 result = f"Model exception occurred: {e}"
                 metadata.error_count += 1
-                agent_logger.error(result)
+                self.logger.error(result)
                 break
 
             except Exception as e:
                 metadata.error_count += 1
-                agent_logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
-                agent_logger.error(
+                self.logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
+                self.logger.error(
                     f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
                 )
 

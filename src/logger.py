@@ -106,17 +106,22 @@ def setup_question_logging(question_dir: str, loggers: list[str]) -> None:
     _question_file_handlers[question_dir] = handlers
 
 
-def teardown_question_logging(question_dir: str) -> None:
+def teardown_question_logging(question_dir: str, loggers: list[str] | None = None) -> None:
     """Removes the file handler for the question"""
 
     global _question_file_handlers
     if question_dir not in _question_file_handlers:
         return
 
-    for handler in _question_file_handlers[question_dir]:
+    handlers = _question_file_handlers[question_dir]
+
+    # If logger names provided, use those; otherwise check common names
+    logger_names = loggers if loggers else ["agent", "tools", "__main__"]
+
+    for handler in handlers:
         handler.close()
         # find and remove question logger
-        for logger_name in ["agent", "tools", "__main__"]:
+        for logger_name in logger_names:
             logger = logging.getLogger(logger_name)
             if handler in logger.handlers:
                 logger.removeHandler(handler)
