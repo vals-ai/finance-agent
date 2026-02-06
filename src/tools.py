@@ -33,6 +33,7 @@ def retry_on_429(func):
         backoff.expo,
         aiohttp.ClientResponseError,
         max_tries=100,
+        max_value=120,
         base=2,
         factor=3,
         jitter=backoff.full_jitter,
