@@ -10,17 +10,22 @@ from tools import (
     RetrieveInformation,
     SubmitFinalResult,
     Tool,
+    VALID_TOOLS,
 )
 
 
 class Parameters(BaseModel):
     model_name: str
-    max_turns: int
-    tools: list[str]
+    max_turns: int = 50
+    tools: list[str] = VALID_TOOLS
     llm_config: LLMConfig
 
 
-def get_agent(parameters: Parameters) -> Agent:
+def get_agent(
+    parameters: Parameters,
+    logger_name: str | None = None,
+    tools_logger_name: str | None = None,
+) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
     available_tools = {
         "web_search": TavilyWebSearch,
@@ -41,6 +46,12 @@ def get_agent(parameters: Parameters) -> Agent:
 
     llm = get_registry_model(parameters.model_name, parameters.llm_config)
 
-    agent = Agent(tools=selected_tools, llm=llm, max_turns=parameters.max_turns)
+    agent = Agent(
+        tools=selected_tools,
+        llm=llm,
+        max_turns=parameters.max_turns,
+        logger_name=logger_name,
+        tools_logger_name=tools_logger_name,
+    )
 
     return agent

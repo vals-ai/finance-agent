@@ -18,6 +18,7 @@ from typing_extensions import override
 tool_logger = get_logger(__name__)
 
 MAX_END_DATE = "2025-04-07"
+VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
 
 
 def is_429(exception: Exception) -> bool:
@@ -27,7 +28,6 @@ def is_429(exception: Exception) -> bool:
     return is429
 
 
-# Define a reusable backoff decorator for 429 errors. Mainly used for the SEC and Google Search APIs.
 def retry_on_429(func):
     @backoff.on_exception(
         backoff.expo,
@@ -45,10 +45,6 @@ def retry_on_429(func):
 
 
 class Tool(ABC):
-    """
-    Abstract base class for tools.
-    """
-
     name: str
     description: str
     input_arguments: dict[str, Any]
@@ -84,10 +80,6 @@ class Tool(ABC):
         llm: LLM,
         logger: logging.Logger | None = None,
     ) -> dict[str, Any]:
-        """
-        Wrapper function to call the subclass' call_tool method
-        """
-        # Use provided logger or fall back to module-level default
         log = logger or tool_logger
 
         formatted_args = json.dumps(arguments, indent=2, default=str)
@@ -190,19 +182,6 @@ class TavilyWebSearch(Tool):
         end_date: str = MAX_END_DATE,
         number_of_results: int = 10,
     ) -> list[dict[str, Any]]:
-        """
-        Search the web for information using Tavily.
-
-        Args:
-            search_query (str): The query to search for
-            start_date (str | None): The start date for the search range for in the format YYYY-MM-DD
-            end_date (str): The end date to search range in the format YYYY-MM-DD
-            number_of_results (int): The number of search results to return.
-
-        Returns:
-            list[dict[str, Any]]: A list of results from Tavily
-        """
-        # Verify start_date and end_date are well formatted as dates in YYYY-MM-DD
         DATE_REGEX = r"^\d{4}-\d{2}-\d{2}$"
 
         kwargs = {}
@@ -315,21 +294,6 @@ class EDGARSearch(Tool):
         form_types: list[str] | str | None = None,
         ciks: list[str] | str | None = None,
     ) -> list[str]:
-        """
-        Search the EDGAR Database through the SEC API asynchronously.
-
-        Args:
-            search_query (str): The keyword or phrase to search
-            form_types (list[str]): List of form types to search
-            ciks (list[str]): List of CIKs to filter by
-            start_date (str): Start date for the search range in yyyy-mm-dd format
-            end_date (str): End date for the search range in yyyy-mm-dd format
-            page (int): Pagination for results
-            top_n_results (int): The top N results to return
-
-        Returns:
-            list[str]: A list of filing results
-        """
 
         if form_types is not None and not isinstance(form_types, list):
             raise ValueError(f"The parameter form_types must be a list if provided. Was of type {type(form_types)}")
@@ -337,7 +301,6 @@ class EDGARSearch(Tool):
         if ciks is not None and not isinstance(ciks, list):
             raise ValueError(f"The parameterciks must be an list if provided. Was of type {type(ciks)}")
 
-        # Verify start_date and end_date are well formatted as dates (yyyy-mm-dd)
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
         if not re.match(date_pattern, start_date):
             raise ValueError(f"start_date '{start_date}' is not in yyyy-mm-dd format")
@@ -359,7 +322,7 @@ class EDGARSearch(Tool):
         payload: dict[str, str | int | list[str]] = {
             "query": search_query,
             "startDate": start_date,
-            "endDate": end_date,  # This will always be at most "2025-04-07"
+            "endDate": end_date,
         }
 
         if page:
@@ -378,7 +341,7 @@ class EDGARSearch(Tool):
 
         async with aiohttp.ClientSession() as session:
             async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
-                response.raise_for_status()  # This will raise ClientResponseError
+                response.raise_for_status()
                 result = await response.json()
 
         results = result.get("filings", [])
@@ -413,7 +376,7 @@ class ParseHtmlPage(Tool):
         "url": {"type": "string", "description": "The URL of the HTML page to parse"},
         "key": {
             "type": "string",
-            "description": "The key to use when saving the result in the conversation's data structure (dict).",
+            "description": "The key to use when saving the result in the conversation's data storage.",
         },
     }
     required_arguments: list[str] = ["url", "key"]
@@ -423,15 +386,6 @@ class ParseHtmlPage(Tool):
 
     @retry_on_429
     async def _parse_html_page(self, url: str) -> str:
-        """
-        Helper method to parse an HTML page and extract its text content.
-
-        Args:
-            url (str): The URL of the HTML page to parse
-
-        Returns:
-            str: The parsed text content
-        """
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(
@@ -454,12 +408,9 @@ class ParseHtmlPage(Tool):
                         raise Exception(str(e))
 
         soup = BeautifulSoup(html_content, "html.parser")
-
-        # Remove script and style elements
         for script_or_style in soup(["script", "style"]):
             _ = script_or_style.extract()
 
-        # Get text
         text = soup.get_text()
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
@@ -468,13 +419,6 @@ class ParseHtmlPage(Tool):
         return text
 
     async def _save_tool_output(self, output: str, key: str, data_storage: dict[str, Any]) -> str:
-        """
-        Save the parsed HTML text to the data_storage dictionary.
-
-        Args:
-            output (str): The parsed text output from call_tool
-            data_storage (dict): The dictionary to save the results to
-        """
         if not output:
             raise ValueError("HTML output was empty")
 
@@ -500,15 +444,6 @@ class ParseHtmlPage(Tool):
 
     @override
     async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
-        """
-        Parse an HTML page and return its text content.
-
-        Args:
-            arguments (dict): Dictionary containing 'url' and 'key'
-
-        Returns:
-            str: The parsed text content
-        """
         url = arguments.get("url", "")
         if not url:
             raise ValueError("URL is required")
@@ -519,7 +454,6 @@ class ParseHtmlPage(Tool):
         text_output = await self._parse_html_page(url)
         tool_result = await self._save_tool_output(text_output, key, data_storage)
 
-        # Returns str instead of dict[str, Any] - the base class __call__ wrapper handles wrapping this in a dict
         return tool_result  # pyright: ignore
 
 
@@ -580,19 +514,13 @@ class RetrieveInformation(Tool):
             **kwargs,
         )
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
-        prompt: str = arguments["prompt"]
-        input_character_ranges = arguments.get("input_character_ranges", [])
-        if input_character_ranges is None:
-            input_character_ranges = []
-
-        # Verify that the prompt contains at least one placeholder in the correct format
+    def _validate_inputs(self, prompt: str, input_character_ranges: list, data_storage: dict[str, Any]) -> dict[str, tuple[int, int]]:
+        """Validate prompt placeholders, character ranges, and data storage keys. Returns the parsed ranges dict."""
         if not re.search(r"{{[^{}]+}}", prompt):
             raise ValueError(
                 "ERROR: Your prompt must include at least one key from data storage in the format {{key_name}}. Please try again with the correct format. You can add documents to the data storage with parse_html_page."
             )
 
-        # Convert list of range objects to a dict for easier lookup
         ranges_dict = {}
         for range_spec in input_character_ranges:
             if not isinstance(range_spec, dict):
@@ -606,7 +534,6 @@ class RetrieveInformation(Tool):
         keys = re.findall(r"{{([^{}]+)}}", prompt)
         keys_set = set(keys)
 
-        # Validate that all keys in input_character_ranges are referenced in the prompt
         for range_key in ranges_dict.keys():
             if range_key not in keys_set:
                 raise ValueError(
@@ -614,32 +541,44 @@ class RetrieveInformation(Tool):
                     f"Keys in prompt: {', '.join(keys_set) if keys_set else '(none)'}"
                 )
 
-        formatted_data = {}
-
-        # Apply character range to each document before substitution
         for key in keys:
             if key not in data_storage:
                 raise KeyError(
                     f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}. Use the retrieve_information tool to add keys to the data storage."
                 )
 
-            doc_content = data_storage[key]
+        return ranges_dict
 
+    def _format_prompt(self, prompt: str, ranges_dict: dict[str, tuple[int, int]], data_storage: dict[str, Any]) -> str:
+        """Substitute data storage content into prompt placeholders, applying character ranges."""
+        keys = re.findall(r"{{([^{}]+)}}", prompt)
+        formatted_data = {}
+
+        for key in keys:
+            doc_content = data_storage[key]
             if key in ranges_dict:
                 start_idx, end_idx = ranges_dict[key]
                 formatted_data[key] = doc_content[start_idx:end_idx]
             else:
                 formatted_data[key] = doc_content
 
-        # Convert {{key}} format to Python string formatting
         formatted_prompt = re.sub(r"{{([^{}]+)}}", r"{\1}", prompt)
 
         try:
-            prompt = formatted_prompt.format(**formatted_data)
+            return formatted_prompt.format(**formatted_data)
         except KeyError as e:
             raise KeyError(
                 f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
+
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+        prompt: str = arguments["prompt"]
+        input_character_ranges = arguments.get("input_character_ranges", [])
+        if input_character_ranges is None:
+            input_character_ranges = []
+
+        ranges_dict = self._validate_inputs(prompt, input_character_ranges, data_storage)
+        prompt = self._format_prompt(prompt, ranges_dict, data_storage)
 
         response = await llm.query(prompt, query_logger=logger)
 

@@ -21,10 +21,8 @@ from vals.sdk.types import OutputObject  # pyright: ignore
 
 
 def create_override_config(**kwargs: object) -> LLMConfig:
-    # Filter kwargs to only include valid LLMConfig fields
     valid_kwargs = {k: v for k, v in kwargs.items() if k in LLMConfig.model_fields}
 
-    # hardcode fix for max output tokens
     if "max_output_tokens" in kwargs and "max_tokens" not in kwargs:
         valid_kwargs["max_tokens"] = kwargs["max_output_tokens"]
 
@@ -38,7 +36,6 @@ async def get_custom_model(
     *_args: object,
     **_kwargs: object,
 ):
-    # set console logging level (file handlers stay at DEBUG)
     for logger in [tool_logger, agent_logger]:
         for handler in logger.handlers:
             if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
@@ -56,18 +53,14 @@ async def get_custom_model(
         "submit_final_result": SubmitFinalResult(),
     }
 
-    # Create run directory for logging
     run_dir = create_run_directory(model_name)
-    question_counter = [0]  # Use list to allow mutation in closure
+    question_counter = [0]
 
     async def custom_call(test_input: str):
-        # Create question directory and setup logging
-        # Use unique question ID to avoid race conditions with parallel execution
         question_id = str(uuid.uuid4())[:8]
         question_counter[0] += 1
         question_dir = create_question_directory(run_dir, question_counter[0])
 
-        # Use unique logger names per question to avoid cross-contamination
         agent_logger_name = f"agent.{question_id}"
         tools_logger_name = f"tools.{question_id}"
         setup_question_logging(question_dir, [agent_logger_name, tools_logger_name])

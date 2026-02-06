@@ -94,7 +94,6 @@ class Agent(ABC):
         self.max_turns: int = max_turns
         self.instructions_prompt: str = instructions_prompt
 
-        # Use instance-specific loggers if names provided, otherwise use module-level defaults
         self.logger = get_logger(logger_name) if logger_name else agent_logger
         self.tools_logger = get_logger(tools_logger_name) if tools_logger_name else None
         # NOTE: Don't set self.llm.logger here - the LLM is shared across agents.
@@ -118,7 +117,6 @@ class Agent(ABC):
         for tool_call in tool_calls:
             tool_name = tool_call.name
 
-            # unpacks tool call arguments
             arguments = tool_call.args
             tool_call_metadata = {
                 "tool_name": tool_name,
@@ -127,7 +125,6 @@ class Agent(ABC):
                 "error": None,
             }
 
-            # Validate tool_name exists
             if tool_name not in self.tools:
                 error_msg = f"Tool '{tool_name}' not found. Available tools: {list(self.tools.keys())}"
 
@@ -139,7 +136,6 @@ class Agent(ABC):
                 tool_results.append(tool_result)
                 continue
 
-            # Validate tool arguments are JSON-parseable
             if isinstance(arguments, str):
                 try:
                     arguments = json.loads(arguments)
@@ -154,14 +150,12 @@ class Agent(ABC):
                     tool_results.append(tool_result)
                     continue
 
-            # Call tools with appropriate arguments
             raw_tool_result = await self.tools[tool_name](
                 arguments, data_storage, self.llm, self.tools_logger
             )
 
             if tool_name == "retrieve_information":
                 if "usage" in raw_tool_result:
-                    # Retrieval can use LLM tokens too, so we need to track them here
                     tool_token_usage: QueryResultMetadata = raw_tool_result["usage"]
                     turn_metadata.retrieval_metadata = tool_token_usage
                     turn_metadata.combined_metadata += tool_token_usage
@@ -170,7 +164,6 @@ class Agent(ABC):
                     )
 
             if raw_tool_result["success"]:
-                # Add tool result to messages
                 tool_call_metadata["success"] = True
             else:
                 tool_call_metadata["error"] = raw_tool_result["result"]
@@ -246,7 +239,6 @@ class Agent(ABC):
             response: QueryResult = await self.llm.query(
                 input=self.messages, tools=tool_definitions, query_logger=self.logger
             )
-        # raise these directly, rather than handling as ModelException
         except MaxContextWindowExceededError:
             raise
         except Exception as e:
@@ -268,16 +260,12 @@ class Agent(ABC):
             raise Exception("LLM response metadata has no cost")
 
         turn_metadata = TurnMetadata(
-            # Metadata for original LLM query for this turn
             query_metadata=response.metadata,
-            # Metadata from LLM usage by the 'retrieve_information' tool
             retrieval_metadata=QueryResultMetadata(),
-            # Metadata from combined LLM query and tool calls for this turn
             combined_metadata=response.metadata,
             total_cost=response.metadata.cost.total,
         )
 
-        # Log the thinking content if available
         if reasoning_text:
             self.logger.info(f"\033[1;33m[LLM REASONING]\033[0m {reasoning_text}")
         if response_text:
@@ -322,7 +310,6 @@ class Agent(ABC):
         Returns:
             tuple[str, dict]: The final answer and metadata about the run
         """
-        # Initialize metadata
         session_id = session_id or str(uuid.uuid4())
 
         assert self.llm._registry_key
@@ -332,10 +319,9 @@ class Agent(ABC):
             model_key=self.llm._registry_key,
             user_input=question,
         )
-        # Initialize data storage for this conversation
+
         data_storage = {}
 
-        # Prepare initial message with instructions
         initial_prompt = self.instructions_prompt.format(question=question)
 
         initial_message = TextInput(text=initial_prompt)
@@ -374,7 +360,6 @@ class Agent(ABC):
                     f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
                 )
 
-                # Explain the error to the agent and give them a chance to recover
                 error_message = TextInput(
                     text=f"An error occurred: {e}. Please review what happened and try a different approach."
                 )
@@ -386,10 +371,8 @@ class Agent(ABC):
         if final_answer:
             metadata.final_answer = final_answer
 
-        # Merge turn-level statistics into session-level statistics
         metadata = _merge_statistics(metadata)
 
-        # save trajectory
         if question_dir:
             log_path = os.path.join(question_dir, "trajectory.json")
             with open(log_path, "w") as f:
@@ -400,5 +383,4 @@ class Agent(ABC):
         elif turn_count >= self.max_turns:
             return "Max turns reached without final answer.", metadata
         else:
-            # handles answers AND errors
             return "Unable to generate answer for unknown reason", metadata

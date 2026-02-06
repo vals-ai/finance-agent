@@ -14,7 +14,7 @@ from logger import (
     teardown_question_logging,
 )
 from model_library.base import LLMConfig
-from tools import tool_logger
+from tools import VALID_TOOLS, tool_logger
 from tqdm.asyncio import tqdm
 
 
@@ -48,7 +48,6 @@ async def run_tests_parallel(
 
     run_dir = create_run_directory(parameters.model_name)
 
-    # save metadata
     run_info = {
         "timestamp": datetime.now().isoformat(),
         "model": parameters.model_name,
@@ -63,7 +62,6 @@ async def run_tests_parallel(
     with open(os.path.join(run_dir, "run_info.json"), "w") as f:
         json.dump(run_info, f, indent=2)
 
-    # save question index mapping
     questions_map = {f"q{i + 1:03d}": q for i, q in enumerate(questions)}
     with open(os.path.join(run_dir, "questions.json"), "w") as f:
         json.dump(questions_map, f, indent=2)
@@ -79,7 +77,6 @@ async def run_tests_parallel(
                 result = await agent.run(question, question_dir=question_dir)
                 return result
             finally:
-                # Tear down question-specific logging
                 teardown_question_logging(question_dir)
 
     tasks = [process_question(question, i + 1) for i, question in enumerate(questions)]
@@ -101,8 +98,6 @@ async def run_tests_parallel(
 
     return formatted_results
 
-
-VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
 
 
 async def main():
@@ -167,7 +162,6 @@ async def main():
     tool_logger.setLevel(logging_level)
     agent_logger.setLevel(logging_level)
 
-    # Get questions from file if provided, otherwise use command line args
     if args.question_file:
         with open(args.question_file) as f:
             questions = [line.strip() for line in f if line.strip()]
