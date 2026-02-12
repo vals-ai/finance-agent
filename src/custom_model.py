@@ -45,6 +45,10 @@ async def get_custom_model(
     parameters["supports_batch"] = False
     llm = get_registry_model(model_name, create_override_config(**parameters))
 
+    token_retry_params = parameters.get("token_retry_params", None)
+    if token_retry_params:
+        await llm.init_token_retry(token_retry_params)
+
     tools: dict[str, Tool] = {
         "web_search": TavilyWebSearch(),
         "retrieve_information": RetrieveInformation(),
