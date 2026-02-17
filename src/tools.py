@@ -208,7 +208,7 @@ class TavilyWebSearch(Tool):
 
         response = await self.client.search(
             search_depth="fast",
-            end_date=MAX_END_DATE,
+            end_date=end_date,
             max_results=number_of_results,
             chunks_per_source=1,
             query=search_query,

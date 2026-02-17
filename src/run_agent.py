@@ -44,8 +44,6 @@ async def run_tests_parallel(
     parameters: Parameters,
 ) -> list[dict[str, Any]]:
     """Run multiple questions in parallel using the custom model"""
-    agent = get_agent(parameters)
-
     run_dir = create_run_directory(parameters.model_name)
 
     run_info = {
@@ -70,6 +68,7 @@ async def run_tests_parallel(
 
     async def process_question(question: str, question_index: int):
         async with semaphore:
+            agent = get_agent(parameters)
             question_dir = create_question_directory(run_dir, question_index)
             setup_question_logging(question_dir, ["agent", "tools"])
 
