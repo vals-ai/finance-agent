@@ -330,9 +330,12 @@ class Agent(ABC):
         self.logger.info(f"\033[1;34m[USER INSTRUCTIONS]\033[0m {initial_prompt}")
 
         turn_count = 0
-        final_answer = None
 
-        while turn_count < self.max_turns:
+        # setting either breaks control loop
+        final_answer = None
+        breaking_error = None
+
+        while turn_count < self.max_turns and breaking_error is not None and final_answer is not None:
             turn_count += 1
 
             try:
@@ -342,16 +345,15 @@ class Agent(ABC):
 
                 metadata.turns.append(turn_metadata)
 
-                if final_answer:
-                    break
-
             except MaxContextWindowExceededError:
                 self._shorten_message_history()  # TODO
             except ModelException as e:
                 result = f"Model exception occurred: {e}"
                 metadata.error_count += 1
                 self.logger.error(result)
-                break
+
+                # breaks out of turn loop
+                breaking_error = e
 
             except Exception as e:
                 metadata.error_count += 1
@@ -364,7 +366,9 @@ class Agent(ABC):
                     text=f"An error occurred: {e}. Please review what happened and try a different approach."
                 )
                 self.messages.append(error_message)
-                break
+                
+                # breaks out of turn loop
+                breaking_error = e
 
         metadata.end_time = datetime.now().isoformat()
 
@@ -382,5 +386,8 @@ class Agent(ABC):
             return final_answer, metadata
         elif turn_count >= self.max_turns:
             return "Max turns reached without final answer.", metadata
+        elif breaking_error:
+            return f"Unable to generate answer due to the following error: {breaking_error}", metadata
         else:
+            # this should never happen
             return "Unable to generate answer for unknown reason", metadata
