@@ -335,7 +335,7 @@ class Agent(ABC):
         final_answer = None
         breaking_error = None
 
-        while turn_count < self.max_turns and breaking_error is not None and final_answer is not None:
+        while turn_count < self.max_turns and breaking_error is None and final_answer is None:
             turn_count += 1
 
             try:
