@@ -6,6 +6,7 @@ from abc import ABC
 from datetime import datetime
 from typing import Any
 
+from logger import get_logger
 from model_library.base import (
     LLM,
     InputItem,
@@ -17,10 +18,8 @@ from model_library.base import (
     ToolResult,
 )
 from model_library.exceptions import MaxContextWindowExceededError
-from pydantic import BaseModel
-
-from logger import get_logger
 from prompt import INSTRUCTIONS_PROMPT
+from pydantic import BaseModel
 from tools import Tool
 from utils import _merge_statistics
 
@@ -150,18 +149,14 @@ class Agent(ABC):
                     tool_results.append(tool_result)
                     continue
 
-            raw_tool_result = await self.tools[tool_name](
-                arguments, data_storage, self.llm, self.tools_logger
-            )
+            raw_tool_result = await self.tools[tool_name](arguments, data_storage, self.llm, self.tools_logger)
 
             if tool_name == "retrieve_information":
                 if "usage" in raw_tool_result:
                     tool_token_usage: QueryResultMetadata = raw_tool_result["usage"]
                     turn_metadata.retrieval_metadata = tool_token_usage
                     turn_metadata.combined_metadata += tool_token_usage
-                    turn_metadata.total_cost += (
-                        tool_token_usage.cost.total if tool_token_usage.cost else 0
-                    )
+                    turn_metadata.total_cost += tool_token_usage.cost.total if tool_token_usage.cost else 0
 
             if raw_tool_result["success"]:
                 tool_call_metadata["success"] = True
@@ -169,9 +164,7 @@ class Agent(ABC):
                 tool_call_metadata["error"] = raw_tool_result["result"]
                 errors.append(raw_tool_result["result"])
 
-            tool_results.append(
-                ToolResult(tool_call=tool_call, result=raw_tool_result["result"])
-            )
+            tool_results.append(ToolResult(tool_call=tool_call, result=raw_tool_result["result"]))
 
             tool_call_metadatas.append(tool_call_metadata)
 
@@ -215,9 +208,7 @@ class Agent(ABC):
         if input_item_count > 0:
             self.logger.info(f"Removed {input_item_count} InputItem(s)")
 
-    async def _process_turn(
-        self, turn_count: int, data_storage: dict[str, Any]
-    ) -> tuple[str | None, TurnMetadata]:
+    async def _process_turn(self, turn_count: int, data_storage: dict[str, Any]) -> tuple[str | None, TurnMetadata]:
         """
         Process a single turn in the agent's conversation.
 
@@ -231,9 +222,7 @@ class Agent(ABC):
         self.logger.info(f"\033[1;34m[TURN {turn_count}]\033[0m")
 
         tool_definitions = [tool.tool_definition for tool in self.tools.values()]
-        self.logger.info(
-            f"\033[1;35m[TOOLS AVAILABLE]\033[0m {[tool.name for tool in tool_definitions]}"
-        )
+        self.logger.info(f"\033[1;35m[TOOLS AVAILABLE]\033[0m {[tool.name for tool in tool_definitions]}")
 
         try:
             response: QueryResult = await self.llm.query(
@@ -272,23 +261,15 @@ class Agent(ABC):
             self.logger.info(f"\033[1;33m[LLM RESPONSE]\033[0m {response_text}")
 
         if tool_calls:
-            tool_results = await self._process_tool_calls(
-                tool_calls, data_storage, turn_metadata
-            )
+            tool_results = await self._process_tool_calls(tool_calls, data_storage, turn_metadata)
             self.messages.extend(tool_results)
 
             submit_final_result_tool_result = next(
-                (
-                    tool_result
-                    for tool_result in tool_results
-                    if tool_result.tool_call.name == "submit_final_result"
-                ),
+                (tool_result for tool_result in tool_results if tool_result.tool_call.name == "submit_final_result"),
                 None,
             )
             if submit_final_result_tool_result:
-                final_answer = json.loads(submit_final_result_tool_result.result)[
-                    "result"
-                ]
+                final_answer = json.loads(submit_final_result_tool_result.result)["result"]
                 self.logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
                 return final_answer, turn_metadata
 
@@ -339,9 +320,7 @@ class Agent(ABC):
             turn_count += 1
 
             try:
-                final_answer, turn_metadata = await self._process_turn(
-                    turn_count, data_storage
-                )
+                final_answer, turn_metadata = await self._process_turn(turn_count, data_storage)
 
                 metadata.turns.append(turn_metadata)
 
@@ -358,15 +337,13 @@ class Agent(ABC):
             except Exception as e:
                 metadata.error_count += 1
                 self.logger.error(f"\033[1;31m[ERROR]\033[0m {e}")
-                self.logger.error(
-                    f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}"
-                )
+                self.logger.error(f"\033[1;31m[traceback]\033[0m {traceback.format_exc()}")
 
                 error_message = TextInput(
                     text=f"An error occurred: {e}. Please review what happened and try a different approach."
                 )
                 self.messages.append(error_message)
-                
+
                 # breaks out of turn loop
                 breaking_error = e
 

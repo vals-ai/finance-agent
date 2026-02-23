@@ -96,9 +96,7 @@ def setup_question_logging(question_dir: str, loggers: list[str]) -> None:
         log_file = os.path.join(question_dir, f"{logger_name}.log")
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)
-        file_formatter = TruncatingFormatter(
-            "%(asctime)s %(levelname)s -- %(name)s: %(message)s"
-        )
+        file_formatter = TruncatingFormatter("%(asctime)s %(levelname)s -- %(name)s: %(message)s")
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
         handlers.append(file_handler)
