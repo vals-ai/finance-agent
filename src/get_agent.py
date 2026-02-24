@@ -1,14 +1,17 @@
+import logging
+
+from model_library.agent import Agent, AgentConfig, AgentHooks, default_before_query, truncate_oldest
 from model_library.base import LLMConfig
+from model_library.base.input import InputItem
+from model_library.exceptions import MaxContextWindowExceededError
 from model_library.registry_utils import get_registry_model
 from pydantic import BaseModel
-
-from agent import Agent
 from tools import (
     EDGARSearch,
-    TavilyWebSearch,
     ParseHtmlPage,
     RetrieveInformation,
     SubmitFinalResult,
+    TavilyWebSearch,
     Tool,
     VALID_TOOLS,
 )
@@ -24,34 +27,41 @@ class Parameters(BaseModel):
 def get_agent(
     parameters: Parameters,
     logger_name: str | None = None,
-    tools_logger_name: str | None = None,
 ) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
-    available_tools = {
+    llm = get_registry_model(parameters.model_name, parameters.llm_config)
+
+    available_tools: dict[str, type[Tool]] = {
         "web_search": TavilyWebSearch,
         "retrieve_information": RetrieveInformation,
         "parse_html_page": ParseHtmlPage,
         "edgar_search": EDGARSearch,
     }
 
-    selected_tools: dict[str, Tool] = {}
-    for tool in parameters.tools:
-        if tool not in available_tools:
+    selected_tools: list[Tool] = []
+    for tool_name in parameters.tools:
+        if tool_name not in available_tools:
             raise Exception(
-                f"Tool {tool} not found in tools. Available tools: {available_tools.keys()}"
+                f"Tool {tool_name} not found in tools. Available tools: {available_tools.keys()}"
             )
-        selected_tools[tool] = available_tools[tool]()
+        tool_cls = available_tools[tool_name]
+        if tool_name == "retrieve_information":
+            selected_tools.append(tool_cls(llm=llm))  # type: ignore[call-arg]
+        else:
+            selected_tools.append(tool_cls())  # type: ignore[call-arg]
 
-    selected_tools["submit_final_result"] = SubmitFinalResult()
+    selected_tools.append(SubmitFinalResult())
 
-    llm = get_registry_model(parameters.model_name, parameters.llm_config)
+    def _before_query(history: list[InputItem], last_error: Exception | None) -> list[InputItem]:
+        """Truncate on context window overflow, default behavior otherwise"""
+        if isinstance(last_error, MaxContextWindowExceededError):
+            return truncate_oldest(history)
+        return default_before_query(history, last_error)
 
-    agent = Agent(
-        tools=selected_tools,
+    return Agent(
         llm=llm,
-        max_turns=parameters.max_turns,
-        logger_name=logger_name,
-        tools_logger_name=tools_logger_name,
+        tools=selected_tools,
+        config=AgentConfig(max_turns=parameters.max_turns),
+        hooks=AgentHooks(before_query=_before_query),
+        logger=logging.getLogger(logger_name or f"agent.{parameters.model_name}"),
     )
-
-    return agent
