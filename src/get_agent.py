@@ -1,6 +1,6 @@
 import logging
 
-from model_library.agent import Agent, AgentConfig, AgentHooks, truncate_oldest
+from model_library.agent import Agent, AgentConfig, AgentHooks, default_before_query, truncate_oldest
 from model_library.base import LLMConfig
 from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
@@ -53,12 +53,10 @@ def get_agent(
     selected_tools.append(SubmitFinalResult())
 
     def _before_query(history: list[InputItem], last_error: Exception | None) -> list[InputItem]:
-        """Only truncate on context window overflow, re-raise other errors"""
+        """Truncate on context window overflow, default behavior otherwise"""
         if isinstance(last_error, MaxContextWindowExceededError):
             return truncate_oldest(history)
-        if last_error:
-            raise last_error
-        return history
+        return default_before_query(history, last_error)
 
     return Agent(
         llm=llm,

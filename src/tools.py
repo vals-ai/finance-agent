@@ -2,28 +2,21 @@ import json
 import logging
 import os
 import re
-import traceback
 from typing import Any
 
 import aiohttp
 import backoff
 from bs4 import BeautifulSoup
-from logger import VERBOSE, get_logger
 from model_library.agent import Tool, ToolOutput
 from model_library.base import LLM
 from tavily import AsyncTavilyClient
-
-tool_logger = get_logger(__name__)
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
 
 
 def is_429(exception: Exception) -> bool:
-    is429 = isinstance(exception, aiohttp.ClientResponseError) and exception.status == 429 or "429" in str(exception)
-    if is429:
-        tool_logger.error(f"429 error: {exception}")
-    return is429
+    return isinstance(exception, aiohttp.ClientResponseError) and exception.status == 429 or "429" in str(exception)
 
 
 def retry_on_429(func):
@@ -315,12 +308,7 @@ class ParseHtmlPage(Tool):
                     raise TimeoutError(
                         "Timeout error when parsing HTML page after 60 seconds. The URL might be blocked or the server is taking too long to respond."
                     )
-                else:
-                    is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
-                    if is_verbose:
-                        raise Exception(str(e) + "\nTraceback: " + traceback.format_exc())
-                    else:
-                        raise Exception(str(e))
+                raise
 
         soup = BeautifulSoup(html_content, "html.parser")
         for script_or_style in soup(["script", "style"]):
