@@ -7,8 +7,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import aiohttp
-import backoff
 from bs4 import BeautifulSoup
+from exceptions import retry_http_errors
 from logger import VERBOSE, get_logger
 from model_library.base import LLM, ToolBody, ToolDefinition
 from pydantic import computed_field
@@ -19,30 +19,6 @@ tool_logger = get_logger(__name__)
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
-
-
-def is_429(exception: Exception) -> bool:
-    is429 = isinstance(exception, aiohttp.ClientResponseError) and exception.status == 429 or "429" in str(exception)
-    if is429:
-        tool_logger.error(f"429 error: {exception}")
-    return is429
-
-
-def retry_on_429(func):
-    @backoff.on_exception(
-        backoff.expo,
-        aiohttp.ClientResponseError,
-        max_tries=100,
-        max_value=120,
-        base=2,
-        factor=3,
-        jitter=backoff.full_jitter,
-        giveup=lambda e: not is_429(e),
-    )
-    async def wrapper(*args: object, **kwargs: object):
-        return await func(*args, **kwargs)
-
-    return wrapper
 
 
 class Tool(ABC):
@@ -175,7 +151,7 @@ class TavilyWebSearch(Tool):
 
         self.client = AsyncTavilyClient(api_key=tavily_api_key)
 
-    @retry_on_429
+    @retry_http_errors(429, 503)
     async def _execute_search(
         self,
         search_query: str,
@@ -284,7 +260,7 @@ class EDGARSearch(Tool):
 
         self.sec_api_url: str = "https://api.sec-api.io/full-text-search"
 
-    @retry_on_429
+    @retry_http_errors(429, 503)
     async def _execute_search(
         self,
         search_query: str,
@@ -385,7 +361,7 @@ class ParseHtmlPage(Tool):
     def __init__(self):
         super().__init__()
 
-    @retry_on_429
+    @retry_http_errors(429, 503)
     async def _parse_html_page(self, url: str) -> str:
         async with aiohttp.ClientSession() as session:
             try:
