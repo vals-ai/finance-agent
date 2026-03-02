@@ -42,13 +42,24 @@ async def run_tests_parallel(
     for question, result in zip(questions, results):
         if isinstance(result, Exception):
             formatted_results.append({"question": question, "success": False, "error": str(result)})
+            print(f"\n❌ Question failed: {question}\n   Error: {result}\n")
         else:
             formatted_results.append({"question": question, "success": result.success, "result": result.model_dump()})
+            if not result.success and result.final_error:
+                print(
+                    f"\n❌ Question failed: {question}\n   Turns: {result.total_turns}\n   Error: [{result.final_error.type}] {result.final_error.message}\n"
+                )
+            else:
+                print(
+                    f"\n✅ Question succeeded: {question}\n   Turns: {result.total_turns}\n   Result: {result.final_answer}\n"
+                )
 
     results_file = run_dir / "results.json"
     results_file.parent.mkdir(parents=True, exist_ok=True)
     with open(results_file, "w") as f:
         json.dump(formatted_results, f, indent=2)
+
+    print(f"\nResults and logs saved to: {run_dir}")
 
     return formatted_results
 
