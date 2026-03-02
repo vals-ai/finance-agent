@@ -48,7 +48,13 @@ class Tool(ABC):
         super().__init__()
 
     @abstractmethod
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any: ...
+    async def call_tool(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+        logger: logging.Logger | None = None,
+    ) -> Any: ...
 
     async def __call__(
         self,
@@ -60,12 +66,16 @@ class Tool(ABC):
         log = logger or tool_logger
 
         formatted_args = json.dumps(arguments, indent=2, default=str)
-        log.info(f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}")
+        log.info(
+            f"\033[1;33m[TOOL: {self.name.upper()}]\033[0m Calling with arguments:\n{formatted_args}"
+        )
 
         try:
             tool_result = await self.call_tool(arguments, data_storage, llm, log)
             formatted_result = json.dumps(tool_result, indent=2, default=str)
-            log.info(f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}")
+            log.info(
+                f"\033[1;32m[TOOL: {self.name.upper()}]\033[0m Returned:\n{formatted_result}"
+            )
             if self.name == "retrieve_information":
                 return {
                     "success": True,
@@ -105,7 +115,9 @@ class SubmitFinalResult(Tool):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-    async def call_tool(self, arguments: dict[str, Any], *args, **kwargs) -> dict[str, Any]:
+    async def call_tool(
+        self, arguments: dict[str, Any], *args, **kwargs
+    ) -> dict[str, Any]:
         final_result = arguments.get("final_result")
         if not final_result:
             return {"success": False, "result": "Final result is required"}
@@ -151,7 +163,7 @@ class TavilyWebSearch(Tool):
 
         self.client = AsyncTavilyClient(api_key=tavily_api_key)
 
-    @retry_http_errors(429, 503)
+    @retry_http_errors(429)
     async def _execute_search(
         self,
         search_query: str,
@@ -165,14 +177,18 @@ class TavilyWebSearch(Tool):
 
         if end_date:
             if not re.match(DATE_REGEX, end_date):
-                raise ValueError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+                raise ValueError(
+                    f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD."
+                )
 
             if end_date > MAX_END_DATE:
                 end_date = MAX_END_DATE
 
         if start_date:
             if not re.match(DATE_REGEX, start_date):
-                raise ValueError(f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+                raise ValueError(
+                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
+                )
             if start_date > MAX_END_DATE:
                 start_date = MAX_END_DATE
             if start_date > end_date:
@@ -194,7 +210,13 @@ class TavilyWebSearch(Tool):
         return response.get("results", [])
 
     @override
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any:
+    async def call_tool(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+        logger: logging.Logger | None = None,
+    ) -> Any:
         results = await self._execute_search(**arguments)
         return results
 
@@ -271,12 +293,15 @@ class EDGARSearch(Tool):
         form_types: list[str] | str | None = None,
         ciks: list[str] | str | None = None,
     ) -> list[str]:
-
         if form_types is not None and not isinstance(form_types, list):
-            raise ValueError(f"The parameter form_types must be a list if provided. Was of type {type(form_types)}")
+            raise ValueError(
+                f"The parameter form_types must be a list if provided. Was of type {type(form_types)}"
+            )
 
         if ciks is not None and not isinstance(ciks, list):
-            raise ValueError(f"The parameterciks must be an list if provided. Was of type {type(ciks)}")
+            raise ValueError(
+                f"The parameterciks must be an list if provided. Was of type {type(ciks)}"
+            )
 
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
         if not re.match(date_pattern, start_date):
@@ -317,7 +342,9 @@ class EDGARSearch(Tool):
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
+            async with session.post(
+                self.sec_api_url, json=payload, headers=headers
+            ) as response:
                 response.raise_for_status()
                 result = await response.json()
 
@@ -326,7 +353,13 @@ class EDGARSearch(Tool):
 
         return results
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any:
+    async def call_tool(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+        logger: logging.Logger | None = None,
+    ) -> Any:
         log = logger or tool_logger
         try:
             return await self._execute_search(**arguments)
@@ -380,7 +413,9 @@ class ParseHtmlPage(Tool):
                 else:
                     is_verbose = os.environ.get("EDGAR_AGENT_VERBOSE", "0") == "1"
                     if is_verbose:
-                        raise Exception(str(e) + "\nTraceback: " + traceback.format_exc())
+                        raise Exception(
+                            str(e) + "\nTraceback: " + traceback.format_exc()
+                        )
                     else:
                         raise Exception(str(e))
 
@@ -395,16 +430,19 @@ class ParseHtmlPage(Tool):
 
         return text
 
-    async def _save_tool_output(self, output: str, key: str, data_storage: dict[str, Any]) -> str:
+    async def _save_tool_output(
+        self, output: str, key: str, data_storage: dict[str, Any]
+    ) -> str:
         if not output:
             raise ValueError("HTML output was empty")
 
         tool_result = ""
         if key in data_storage:
-            tool_result = (
-                "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
-            )
-        tool_result += f"SUCCESS: The result has been saved to the data storage under the key: {key}." + "\n"
+            tool_result = "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
+        tool_result += (
+            f"SUCCESS: The result has been saved to the data storage under the key: {key}."
+            + "\n"
+        )
 
         data_storage[key] = output
 
@@ -420,7 +458,13 @@ class ParseHtmlPage(Tool):
         return tool_result
 
     @override
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+        logger: logging.Logger | None = None,
+    ) -> dict[str, Any]:
         url = arguments.get("url", "")
         if not url:
             raise ValueError("URL is required")
@@ -491,7 +535,9 @@ class RetrieveInformation(Tool):
             **kwargs,
         )
 
-    def _validate_inputs(self, prompt: str, input_character_ranges: list, data_storage: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    def _validate_inputs(
+        self, prompt: str, input_character_ranges: list, data_storage: dict[str, Any]
+    ) -> dict[str, tuple[int, int]]:
         """Validate prompt placeholders, character ranges, and data storage keys. Returns the parsed ranges dict."""
         if not re.search(r"{{[^{}]+}}", prompt):
             raise ValueError(
@@ -504,8 +550,14 @@ class RetrieveInformation(Tool):
                 raise ValueError(
                     "ERROR: Each item in input_character_ranges must be an object with 'key', 'start', and 'end' fields."
                 )
-            if "key" not in range_spec or "start" not in range_spec or "end" not in range_spec:
-                raise ValueError("ERROR: Each range specification must have 'key', 'start', and 'end' fields.")
+            if (
+                "key" not in range_spec
+                or "start" not in range_spec
+                or "end" not in range_spec
+            ):
+                raise ValueError(
+                    "ERROR: Each range specification must have 'key', 'start', and 'end' fields."
+                )
             ranges_dict[range_spec["key"]] = (range_spec["start"], range_spec["end"])
 
         keys = re.findall(r"{{([^{}]+)}}", prompt)
@@ -526,7 +578,12 @@ class RetrieveInformation(Tool):
 
         return ranges_dict
 
-    def _format_prompt(self, prompt: str, ranges_dict: dict[str, tuple[int, int]], data_storage: dict[str, Any]) -> str:
+    def _format_prompt(
+        self,
+        prompt: str,
+        ranges_dict: dict[str, tuple[int, int]],
+        data_storage: dict[str, Any],
+    ) -> str:
         """Substitute data storage content into prompt placeholders, applying character ranges."""
         keys = re.findall(r"{{([^{}]+)}}", prompt)
         formatted_data = {}
@@ -548,13 +605,21 @@ class RetrieveInformation(Tool):
                 f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(data_storage.keys())}"
             )
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        arguments: dict[str, Any],
+        data_storage: dict[str, Any],
+        llm: LLM,
+        logger: logging.Logger | None = None,
+    ) -> dict[str, Any]:
         prompt: str = arguments["prompt"]
         input_character_ranges = arguments.get("input_character_ranges", [])
         if input_character_ranges is None:
             input_character_ranges = []
 
-        ranges_dict = self._validate_inputs(prompt, input_character_ranges, data_storage)
+        ranges_dict = self._validate_inputs(
+            prompt, input_character_ranges, data_storage
+        )
         prompt = self._format_prompt(prompt, ranges_dict, data_storage)
 
         response = await llm.query(prompt, query_logger=logger)
