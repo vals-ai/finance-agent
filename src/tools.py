@@ -5,35 +5,14 @@ import re
 from typing import Any
 
 import aiohttp
-import backoff
 from bs4 import BeautifulSoup
+from exceptions import retry_http_errors
 from model_library.agent import Tool, ToolOutput
 from model_library.base import LLM
 from tavily import AsyncTavilyClient
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
-
-
-def is_429(exception: Exception) -> bool:
-    return isinstance(exception, aiohttp.ClientResponseError) and exception.status == 429 or "429" in str(exception)
-
-
-def retry_on_429(func):
-    @backoff.on_exception(
-        backoff.expo,
-        aiohttp.ClientResponseError,
-        max_tries=100,
-        max_value=120,
-        base=2,
-        factor=3,
-        jitter=backoff.full_jitter,
-        giveup=lambda e: not is_429(e),
-    )
-    async def wrapper(*args: object, **kwargs: object):
-        return await func(*args, **kwargs)
-
-    return wrapper
 
 
 class SubmitFinalResult(Tool):
@@ -97,7 +76,7 @@ class TavilyWebSearch(Tool):
             raise ValueError("TAVILY_API_KEY is not set")
         self.client = AsyncTavilyClient(api_key=tavily_api_key)
 
-    @retry_on_429
+    @retry_http_errors(429)
     async def _execute_search(
         self,
         search_query: str,
@@ -199,7 +178,7 @@ class EDGARSearch(Tool):
         self.sec_api_key: str = sec_api_key
         self.sec_api_url: str = "https://api.sec-api.io/full-text-search"
 
-    @retry_on_429
+    @retry_http_errors(429, 503)
     async def _execute_search(
         self,
         search_query: str,
@@ -210,7 +189,6 @@ class EDGARSearch(Tool):
         form_types: list[str] | str | None = None,
         ciks: list[str] | str | None = None,
     ) -> list[str]:
-
         if form_types is not None and not isinstance(form_types, list):
             raise ValueError(f"The parameter form_types must be a list if provided. Was of type {type(form_types)}")
 
@@ -292,7 +270,7 @@ class ParseHtmlPage(Tool):
             required=["url", "key"],
         )
 
-    @retry_on_429
+    @retry_http_errors(429, 503)
     async def _parse_html_page(self, url: str) -> str:
         async with aiohttp.ClientSession() as session:
             try:
@@ -412,7 +390,9 @@ class RetrieveInformation(Tool):
         )
         self._llm = llm
 
-    def _validate_inputs(self, prompt: str, input_character_ranges: list, state: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    def _validate_inputs(
+        self, prompt: str, input_character_ranges: list, state: dict[str, Any]
+    ) -> dict[str, tuple[int, int]]:
         """Validate prompt placeholders, character ranges, and data storage keys. Returns the parsed ranges dict."""
         if not re.search(r"{{[^{}]+}}", prompt):
             raise ValueError(
@@ -477,7 +457,6 @@ class RetrieveInformation(Tool):
 
         ranges_dict = self._validate_inputs(prompt, input_character_ranges, state)
         prompt = self._format_prompt(prompt, ranges_dict, state)
-
         response = await self._llm.query(prompt)
 
         return ToolOutput(
