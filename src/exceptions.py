@@ -1,10 +1,11 @@
+import logging
 from collections.abc import Callable
 from typing import Any
 
 import aiohttp
 import backoff
 
-exceptions_logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def retry_http_errors(*status_codes: int) -> Callable:
@@ -15,7 +16,7 @@ def retry_http_errors(*status_codes: int) -> Callable:
                 and exception.status == code
                 or str(code) in str(exception)
             ):
-                exceptions_logger.error(f"{code} error: {exception}")
+                logger.error(f"{code} error: {exception}")
                 return True
         return False
 
