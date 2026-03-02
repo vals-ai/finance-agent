@@ -48,7 +48,7 @@ class Tool(ABC):
         super().__init__()
 
     @abstractmethod
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]: ...
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any: ...
 
     async def __call__(
         self,
@@ -194,7 +194,7 @@ class TavilyWebSearch(Tool):
         return response.get("results", [])
 
     @override
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any:
         results = await self._execute_search(**arguments)
         return results
 
@@ -326,7 +326,7 @@ class EDGARSearch(Tool):
 
         return results
 
-    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> dict[str, Any]:
+    async def call_tool(self, arguments: dict[str, Any], data_storage: dict[str, Any], llm: LLM, logger: logging.Logger | None = None) -> Any:
         log = logger or tool_logger
         try:
             return await self._execute_search(**arguments)
