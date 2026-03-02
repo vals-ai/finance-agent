@@ -503,7 +503,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2.2.1" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "model-library", specifier = "==0.1.8" },
+    { name = "model-library", specifier = "==0.1.14" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sec-api", specifier = ">=1.0.32" },
     { name = "tavily", specifier = "==1.1.0" },
@@ -695,7 +695,7 @@ wheels = [
 
 [[package]]
 name = "google-genai"
-version = "1.60.0"
+version = "1.65.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -709,9 +709,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/3f/a753be0dcee352b7d63bc6d1ba14a72591d63b6391dac0cdff7ac168c530/google_genai-1.60.0.tar.gz", hash = "sha256:9768061775fddfaecfefb0d6d7a6cabefb3952ebd246cd5f65247151c07d33d1", size = 487721, upload-time = "2026-01-21T22:17:30.398Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/f9/cc1191c2540d6a4e24609a586c4ed45d2db57cfef47931c139ee70e5874a/google_genai-1.65.0.tar.gz", hash = "sha256:d470eb600af802d58a79c7f13342d9ea0d05d965007cae8f76c7adff3d7a4750", size = 497206, upload-time = "2026-02-26T00:20:33.824Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/e5/384b1f383917b5f0ae92e28f47bc27b16e3d26cd9bacb25e9f8ecab3c8fe/google_genai-1.60.0-py3-none-any.whl", hash = "sha256:967338378ffecebec19a8ed90cf8797b26818bacbefd7846a9280beb1099f7f3", size = 719431, upload-time = "2026-01-21T22:17:28.086Z" },
+    { url = "https://files.pythonhosted.org/packages/68/3c/3fea4e7c91357c71782d7dcaad7a2577d636c90317e003386893c25bc62c/google_genai-1.65.0-py3-none-any.whl", hash = "sha256:68c025205856919bc03edb0155c11b4b833810b7ce17ad4b7a9eeba5158f6c44", size = 724429, upload-time = "2026-02-26T00:20:32.186Z" },
 ]
 
 [package.optional-dependencies]
@@ -982,7 +982,7 @@ wheels = [
 
 [[package]]
 name = "model-library"
-version = "0.1.8"
+version = "0.1.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ai21" },
@@ -1003,9 +1003,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "xai-sdk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/18/7dd4961f19628118fd1fc23e2cd09e29e114cfa4aead158e0495a07e96ee/model_library-0.1.8.tar.gz", hash = "sha256:760ba3fe1e05a3c896e8801b52472fdefb107637f8bdb8af77215baa9a1db266", size = 276368, upload-time = "2026-01-27T19:25:45.991Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/9c/26494d18775e0ce2cacee999d4bfc7dedab6e436750f324182f02b5ecc0e/model_library-0.1.14.tar.gz", hash = "sha256:d27c81ced301ba7dda31f5d5014a56ec1a536808138c1a4efbdcb49e25ad0bf4", size = 344442, upload-time = "2026-03-02T03:39:53.01Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/37/b4d00b6aff3a039ccb77a9a60150866eb36281abd586b691f31d6bd91120/model_library-0.1.8-py3-none-any.whl", hash = "sha256:7fd39fabeedf814e76d747dfa716ad40a460f0f2695cb7ac89df4a45c290bfd2", size = 141060, upload-time = "2026-01-27T19:25:44.753Z" },
+    { url = "https://files.pythonhosted.org/packages/64/b5/999a7d11dd8c5282367138c05cc54a8b21fe6f4fd480103d60b740c6b034/model_library-0.1.14-py3-none-any.whl", hash = "sha256:402aefb238179f37d756e839031c233c7db62c6182c9a4f46e24397db087964d", size = 175702, upload-time = "2026-03-02T03:39:51.448Z" },
 ]
 
 [[package]]

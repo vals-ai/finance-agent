@@ -1,119 +1,85 @@
-# ValsAI Finance Agent Benchmark Codebase
+# Running Finance Agent Benchmark
 
-Finance Agent is a tool for financial research and analysis that leverages large language models and specialized financial tools to answer complex queries about companies, financial statements, and SEC filings.
+Our Finance Agent benchmark evaluates LLMs on their ability to use tools to research and answer complex financial questions about companies, financial statements, and SEC filings.
 
-This repo contains the codebase to run the agent that was used to create the benchmark [Finance Agent](https://www.vals.ai/benchmarks/finance_agent). It makes it easy to test the harness with any question or model of your choices.
+The agent has access to the following tools:
 
-## Overview
-
-This agent connects to various data sources including:
-
-- SEC EDGAR database
-- Web search (via Tavily)
-- HTML page parsing capabilities
-- Information retrieval and analysis
-
-It uses a configurable LLM backend (OpenAI, Anthropic, Google, etc.) to orchestrate these tools and generate comprehensive financial analysis.
-For all models except Anthropic's, we use OpenAI SDK for the agent.
-
-## Installation
-
-Run the following command to install the enviromnent:
-
-```
-pip install -r requirements.txt
-```
-
-We recommend creating and using a Conda environment for this. For detailed instructions on managing Conda environments, see the [official Conda documentation](https://docs.conda.io/projects/conda/en/stable/user-guide/tasks/manage-environments.html).
-
-## Environment Setup
-
-Create a `.env` file with the necessary API keys:
-
-```
-# LLM API Keys
-# Note: It's only necessary to set the API keys for the models you plan on using
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-GOOGLE_API_KEY=your_google_key
-MISTRAL_API_KEY=your_mistral_key
-TOGETHER_API_KEY=your_together_api_key
-FIREWORKS_API_KEY=your_fireworks_api_key
-XAI_API_KEY=your_grok_api_key
-COHERE_API_KEY=cohere_api_key
-
-# Tool API Keys
-TAVILY_API_KEY=your_tavily_key
-SEC_EDGAR_API_KEY=your_sec_api_key
-```
-
-You can create a Tavily API key [here](https://tavily.com/), and an SEC API key [here](https://sec-api.io/).
-
-## Running the Agent
-
-To experiment with the agent, you can run the following command:
-
-```bash
-python src/run_agent.py --questions "What was Apple's revenue in 2023?"
-```
-
-You can specify multiple questions at once:
-
-```bash
-pythons src/run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
-```
-
-To specify a specific model, use the `--model` flag:
-
-```bash
-python src/run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-4o
-```
-
-You can also specify a list of questions in a text file, one question per line, with the following command:
-
-```bash
-python src/run_agent.py --question-file data/public.txt
-```
-
-For a full list of parameters, please run:
-
-```bash
-python src/run_agent.py --help
-```
-
-The default configuration is the one we used to run the benchmark.
-
-## Available Tools
-
-- `web_search`: Search the web for information
+- `web_search`: Search the web for information (via Tavily)
 - `edgar_search`: Search the SEC's EDGAR database for filings
 - `parse_html_page`: Parse and extract content from web pages
 - `retrieve_information`: Access stored information from previous steps
 
-## Available Models
+For more details on the benchmark, please refer to our [public website](https://www.vals.ai/benchmarks/finance_agent).
 
-The harness use's the Vals [Model Library](https://github.com/vals-ai/model-library), an open-source repository that allows you to call models in a unified manner.
+## Set up
 
-Generally, any model that is in the Vals Model Library (and that supports tool calling) can be used by the agent. Here are a few commonly used models:
+### Dependencies
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) for dependency management. Then run:
 
 ```
-openai/gpt-5.1-2025-11-13
-anthropic/claude-sonnet-4-5-20250929-thinking
-google/gemini-2.5-pro
-grok/grok-4-fast-reasoning
-cohere/command-a-03-2025
-zai/glm-4.6
-kimi/kimi-k2-thinking
-fireworks/glm-4p6
+make install
+source .venv/bin/activate
 ```
 
-Full documentation is available in the model library repo. You can find the full list of models [here](https://github.com/vals-ai/model-library/blob/main/model_library/config/all_models.json).
+### Platform
 
-## Logs and Output
+Make an account on [platform.vals.ai](https://www.platform.vals.ai/auth) with your company email address. Go to the admin page and create a new API key for yourself.
 
-The agent writes detailed logs to the `logs` directory, including:
+### Environment Variables
 
-- Session-specific logs with timestamps
-- Tool usage statistics
-- Token usage
-- Error tracking
+Create a `.env` file in the root of the project and add the following:
+
+```
+VALS_API_KEY=<api_key>
+
+# LLM API Keys (only set the ones you plan on using)
+OPENAI_API_KEY=<openai_api_key>
+ANTHROPIC_API_KEY=<anthropic_api_key>
+GOOGLE_API_KEY=<google_api_key>
+ETC_API_KEY=<etc_api_key>
+
+# Tool API Keys
+TAVILY_API_KEY=<tavily_api_key>
+SEC_EDGAR_API_KEY=<sec_api_key>
+```
+
+You can create a Tavily API key [here](https://tavily.com/), and an SEC API key [here](https://sec-api.io/).
+
+The `.env` takes precedence over set environment variables.
+
+Finally, you should add the "Test Suite IDs" to suites.json. These should have generally been provided to you via email, but you can also find them in the platform, by navigating to the "Test Suites" page, clicking the relevant test suite, and looking on the right sidebar under "Test Suite ID".
+
+## Running the benchmark
+
+For a list of command line options, run `python src/run_agent.py --help`
+
+To run, for example, a single question on openai/gpt-5.2-2025-12-11:
+
+```
+python src/run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-5.2-2025-12-11
+```
+
+You can specify multiple questions at once:
+
+```
+python src/run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
+```
+
+You can also specify a list of questions in a text file, one question per line:
+
+```
+python src/run_agent.py --question-file data/public.txt
+```
+
+The default configuration is the one we used to run the benchmark.
+
+### List of Models
+
+A list of available models can be found at our [model library](https://github.com/vals-ai/model-library/blob/main/model_library/config/all_models.json), and also by running `make browse-models` in the model library repository.
+
+To run your own harness or model, just modify the `get_custom_model` function as needed. To see the full documentation on how the SDK works, visit [our docs](https://docs.vals.ai/sdk/running_suites).
+
+## Logs
+
+The agent writes detailed logs to the `logs/` directory. Each run creates a timestamped directory with per-question log files containing tool usage, token counts, and error tracking.
