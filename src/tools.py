@@ -36,9 +36,9 @@ class SubmitFinalResult(Tool):
         )
 
     async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
-        final_result = args.get("final_result")
+        final_result = args["final_result"]
         if not final_result:
-            return ToolOutput(output="Final result is required", error="Final result is required")
+            raise ValueError("Final result must not be empty")
         return ToolOutput(output=final_result, done=True)
 
 
@@ -324,12 +324,8 @@ class ParseHtmlPage(Tool):
         return tool_result
 
     async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
-        url = args.get("url", "")
-        if not url:
-            raise ValueError("URL is required")
-        key = args.get("key", "")
-        if not key:
-            raise ValueError("Key is required")
+        url = args["url"]
+        key = args["key"]
 
         text_output = await self._parse_html_page(url)
         tool_result = await self._save_tool_output(text_output, key, state)

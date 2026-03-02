@@ -3,7 +3,6 @@ from typing import Any
 
 import aiohttp
 import backoff
-from logger import get_logger
 
 exceptions_logger = get_logger(__name__)
 
@@ -11,7 +10,11 @@ exceptions_logger = get_logger(__name__)
 def retry_http_errors(*status_codes: int) -> Callable:
     def should_retry(exception: Exception) -> bool:
         for code in status_codes:
-            if isinstance(exception, aiohttp.ClientResponseError) and exception.status == code or str(code) in str(exception):
+            if (
+                isinstance(exception, aiohttp.ClientResponseError)
+                and exception.status == code
+                or str(code) in str(exception)
+            ):
                 exceptions_logger.error(f"{code} error: {exception}")
                 return True
         return False

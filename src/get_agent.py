@@ -7,13 +7,13 @@ from model_library.exceptions import MaxContextWindowExceededError
 from model_library.registry_utils import get_registry_model
 from pydantic import BaseModel
 from tools import (
+    VALID_TOOLS,
     EDGARSearch,
     ParseHtmlPage,
     RetrieveInformation,
     SubmitFinalResult,
     TavilyWebSearch,
     Tool,
-    VALID_TOOLS,
 )
 
 
@@ -41,9 +41,7 @@ def get_agent(
     selected_tools: list[Tool] = []
     for tool_name in parameters.tools:
         if tool_name not in available_tools:
-            raise Exception(
-                f"Tool {tool_name} not found in tools. Available tools: {available_tools.keys()}"
-            )
+            raise Exception(f"Tool {tool_name} not found in tools. Available tools: {available_tools.keys()}")
         tool_cls = available_tools[tool_name]
         if tool_name == "retrieve_information":
             selected_tools.append(tool_cls(llm=llm))  # type: ignore[call-arg]
