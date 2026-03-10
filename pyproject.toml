@@ -20,6 +20,13 @@ dependencies = [
     "tavily==1.1.0",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["finance_agent"]
+
 [dependency-groups]
 dev = [
   # style
@@ -28,6 +35,9 @@ dev = [
   # env
   "dotenv",
 ]
+
+[project.scripts]
+finance-agent = "finance_agent.run_agent:main_sync"
 
 [tool.basedpyright]
 exclude = [
