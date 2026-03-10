@@ -6,7 +6,8 @@ from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
 from model_library.registry_utils import get_registry_model
 from pydantic import BaseModel
-from tools import (
+
+from finance_agent.tools import (
     VALID_TOOLS,
     EDGARSearch,
     ParseHtmlPage,

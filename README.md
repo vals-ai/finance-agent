@@ -52,24 +52,24 @@ Finally, you should add the "Test Suite IDs" to suites.json. These should have g
 
 ## Running the benchmark
 
-For a list of command line options, run `python src/run_agent.py --help`
+For a list of command line options, run `finance-agent --help`
 
 To run, for example, a single question on openai/gpt-5.2-2025-12-11:
 
 ```
-python src/run_agent.py --questions "What was Apple's revenue in 2023?" --model openai/gpt-5.2-2025-12-11
+finance-agent --questions "What was Apple's revenue in 2023?" --model openai/gpt-5.2-2025-12-11
 ```
 
 You can specify multiple questions at once:
 
 ```
-python src/run_agent.py --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
+finance-agent --questions "What was Apple's revenue in 2023?" "What was NFLX's revenue in 2024?"
 ```
 
 You can also specify a list of questions in a text file, one question per line:
 
 ```
-python src/run_agent.py --question-file data/public.txt
+finance-agent --question-file data/public.txt
 ```
 
 The default configuration is the one we used to run the benchmark.
