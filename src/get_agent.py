@@ -1,7 +1,7 @@
 import logging
 
 from model_library.agent import Agent, AgentConfig, AgentHooks, default_before_query, truncate_oldest
-from model_library.base import LLMConfig
+from model_library.base import LLM, LLMConfig
 from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
 from model_library.registry_utils import get_registry_model
@@ -27,9 +27,11 @@ class Parameters(BaseModel):
 def get_agent(
     parameters: Parameters,
     logger_name: str | None = None,
+    llm: LLM | None = None,
 ) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
-    llm = get_registry_model(parameters.model_name, parameters.llm_config)
+    if llm is None:
+        llm = get_registry_model(parameters.model_name, parameters.llm_config)
 
     available_tools: dict[str, type[Tool]] = {
         "web_search": TavilyWebSearch,

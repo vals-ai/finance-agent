@@ -2,8 +2,9 @@ from typing import Any
 
 from get_agent import Parameters, get_agent
 from model_library.agent import AgentResult
-from model_library.base import LLMConfig
+from model_library.base import LLMConfig, TokenRetryParams
 from model_library.base.input import TextInput
+from model_library.registry_utils import get_registry_model
 from model_library.utils import create_file_logger, create_run_dir
 from prompt import INSTRUCTIONS_PROMPT
 from vals.sdk.types import OutputObject  # pyright: ignore
@@ -43,6 +44,14 @@ async def get_custom_model(
         llm_config=create_override_config(**parameters),
     )
 
+    llm = get_registry_model(model_name, params.llm_config)
+
+    token_retry_params = parameters.get("token_retry_params", None)
+    if token_retry_params:
+        await llm.init_token_retry(
+            token_retry_params=TokenRetryParams.model_validate(token_retry_params),
+        )
+
     run_dir = create_run_dir("finance_agent", model_name)
     question_counter = 0
 
@@ -53,7 +62,7 @@ async def get_custom_model(
         log_file = run_dir / f"q{question_idx:03d}.log"
 
         with create_file_logger(f"finance_agent.q{question_idx:03d}", log_file) as logger:
-            agent = get_agent(params, logger_name=logger.name)
+            agent = get_agent(params, logger_name=logger.name, llm=llm)
 
             prompt = INSTRUCTIONS_PROMPT.format(question=test_input)
             result = await agent.run([TextInput(text=prompt)])
