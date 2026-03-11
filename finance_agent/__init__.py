@@ -1,7 +1,7 @@
-from finance_agent.exceptions import retry_http_errors
-from finance_agent.get_agent import Parameters, get_agent
-from finance_agent.prompt import INSTRUCTIONS_PROMPT
-from finance_agent.tools import (
+from .exceptions import retry_http_errors
+from .get_agent import Parameters, get_agent
+from .prompt import INSTRUCTIONS_PROMPT
+from .tools import (
     VALID_TOOLS,
     EDGARSearch,
     ParseHtmlPage,

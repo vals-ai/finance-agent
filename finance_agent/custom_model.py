@@ -6,8 +6,8 @@ from model_library.base.input import TextInput
 from model_library.registry_utils import get_registry_model
 from vals.sdk.types import OutputObject  # pyright: ignore
 
-from finance_agent.get_agent import Parameters, get_agent
-from finance_agent.prompt import INSTRUCTIONS_PROMPT
+from .get_agent import Parameters, get_agent
+from .prompt import INSTRUCTIONS_PROMPT
 
 
 def agent_result_to_output_object(result: AgentResult) -> OutputObject:
