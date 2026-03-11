@@ -24,7 +24,9 @@ source .venv/bin/activate
 
 ### Platform
 
-Make an account on [platform.vals.ai](https://www.platform.vals.ai/auth) with your company email address. Go to the admin page and create a new API key for yourself.
+Access to the Vals platform is gated and requires approval. Please reach out to us at [vals.ai](https://www.vals.ai/) to request access.
+
+Once approved, make an account on [platform.vals.ai](https://www.platform.vals.ai/auth) with your company email address. Go to the admin page and create a new API key for yourself.
 
 ### Environment Variables
 

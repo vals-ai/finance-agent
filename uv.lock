@@ -510,7 +510,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2.2.1" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "model-library", specifier = "==0.1.14" },
+    { name = "model-library", specifier = "==0.1.15" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sec-api", specifier = ">=1.0.32" },
     { name = "tavily", specifier = "==1.1.0" },
@@ -989,7 +989,7 @@ wheels = [
 
 [[package]]
 name = "model-library"
-version = "0.1.14"
+version = "0.1.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ai21" },
@@ -1003,6 +1003,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pytest-xdist" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "redis" },
     { name = "rich" },
@@ -1010,9 +1011,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "xai-sdk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/9c/26494d18775e0ce2cacee999d4bfc7dedab6e436750f324182f02b5ecc0e/model_library-0.1.14.tar.gz", hash = "sha256:d27c81ced301ba7dda31f5d5014a56ec1a536808138c1a4efbdcb49e25ad0bf4", size = 344442, upload-time = "2026-03-02T03:39:53.01Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/25/8b/404bf4eb427fcb9a9e7cae8eecf2d600d5e151f2138a77969b7356917b9f/model_library-0.1.15.tar.gz", hash = "sha256:ce1ffcca0336ab6cefc856efddc67e0e036feb9f1c2994ee630c1f7e56fd8f30", size = 355268, upload-time = "2026-03-10T21:52:36.428Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/b5/999a7d11dd8c5282367138c05cc54a8b21fe6f4fd480103d60b740c6b034/model_library-0.1.14-py3-none-any.whl", hash = "sha256:402aefb238179f37d756e839031c233c7db62c6182c9a4f46e24397db087964d", size = 175702, upload-time = "2026-03-02T03:39:51.448Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/c1/4e40b6c984b33467d3a415a67f71a7d15c37bf4e381134d8fee23a970b12/model_library-0.1.15-py3-none-any.whl", hash = "sha256:cbb444bbecd55be2d068b6f729c0b0f382c4abf4f0d862df297de3c78f198dc5", size = 168941, upload-time = "2026-03-10T21:52:34.604Z" },
 ]
 
 [[package]]
