@@ -43,7 +43,7 @@ ETC_API_KEY=<etc_api_key>
 
 # Tool API Keys
 TAVILY_API_KEY=<tavily_api_key>
-SEC_EDGAR_API_KEY=<sec_api_key>
+SEC_EDGAR_API_KEY=<sec_api_key>  # supports semicolon-separated keys for round-robin rotation, e.g. key1;key2;key3
 ```
 
 You can create a Tavily API key [here](https://tavily.com/), and an SEC API key [here](https://sec-api.io/).
