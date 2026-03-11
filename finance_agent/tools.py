@@ -11,6 +11,7 @@ from model_library.base import LLM
 from tavily import AsyncTavilyClient
 
 from .exceptions import retry_http_errors
+from .key_rotator import KeyRotator, get_rotator
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
@@ -175,12 +176,17 @@ class EDGARSearch(Tool):
     }
     required = ["search_query"]
 
-    def __init__(self, sec_api_key: str | None = None):
-        if sec_api_key is None:
-            sec_api_key = os.getenv("SEC_EDGAR_API_KEY")
-        if not sec_api_key:
-            raise ValueError("SEC_EDGAR_API_KEY is not set")
-        self.sec_api_key: str = sec_api_key
+    def __init__(
+        self,
+        sec_api_key: str | None = None,
+        key_rotator: KeyRotator | None = None,
+    ):
+        if key_rotator is not None:
+            self._key_rotator = key_rotator
+        elif sec_api_key:
+            self._key_rotator = KeyRotator([sec_api_key])
+        else:
+            self._key_rotator = get_rotator("SEC_EDGAR_API_KEY")
         self.sec_api_url: str = "https://api.sec-api.io/full-text-search"
 
     @retry_http_errors(429, 503)
@@ -235,7 +241,7 @@ class EDGARSearch(Tool):
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": self.sec_api_key,
+            "Authorization": self._key_rotator.next_key(),
         }
 
         async with aiohttp.ClientSession() as session:
