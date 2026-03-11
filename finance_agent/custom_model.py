@@ -4,7 +4,6 @@ from model_library.agent import AgentResult
 from model_library.base import LLMConfig, TokenRetryParams
 from model_library.base.input import TextInput
 from model_library.registry_utils import get_registry_model
-from model_library.utils import create_file_logger, create_run_dir
 from vals.sdk.types import OutputObject  # pyright: ignore
 
 from finance_agent.get_agent import Parameters, get_agent
@@ -53,24 +52,20 @@ async def get_custom_model(
             token_retry_params=TokenRetryParams.model_validate(token_retry_params),
         )
 
-    run_dir = create_run_dir("finance_agent", model_name)
     question_counter = 0
 
     async def custom_call(test_input: str):
         nonlocal question_counter
         question_counter += 1
         question_idx = question_counter
-        log_file = run_dir / f"q{question_idx:03d}.log"
 
-        with create_file_logger(f"finance_agent.q{question_idx:03d}", log_file) as logger:
-            agent = get_agent(params, logger_name=logger.name, llm=llm)
+        prompt = INSTRUCTIONS_PROMPT.format(question=test_input)
 
-            prompt = INSTRUCTIONS_PROMPT.format(question=test_input)
-            result = await agent.run([TextInput(text=prompt)])
-            if not result.success and result.final_error:
-                print(
-                    f"\n❌ Question {question_idx} failed: [{result.final_error.type}] {result.final_error.message}\n"
-                )
-            return agent_result_to_output_object(result)
+        agent = get_agent(params, llm=llm)
+        result = await agent.run([TextInput(text=prompt)], question_id=f"q{question_idx:03d}")
+
+        if not result.success and result.final_error:
+            print(f"\nFAIL Question {question_idx} failed: [{result.final_error.type}] {result.final_error.message}\n")
+        return agent_result_to_output_object(result)
 
     return custom_call

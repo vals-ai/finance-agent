@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from model_library.agent import AgentResult
 from model_library.base import LLMConfig
 from model_library.base.input import TextInput
-from model_library.utils import create_file_logger, create_run_dir
 from tqdm.asyncio import tqdm
 
 from finance_agent.get_agent import Parameters, get_agent
@@ -22,18 +21,14 @@ async def run_tests_parallel(
     parameters: Parameters,
 ) -> list[dict[str, Any]]:
     """Run multiple questions in parallel using the agent"""
-    run_dir = create_run_dir("finance_agent", parameters.model_name)
-
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def process_question(question: str, question_index: int):
         async with semaphore:
-            log_file = run_dir / f"q{question_index:03d}.log"
-            with create_file_logger(f"agent.q{question_index:03d}", log_file) as logger:
-                agent = get_agent(parameters, logger_name=logger.name)
-                prompt = INSTRUCTIONS_PROMPT.format(question=question)
-                result = await agent.run([TextInput(text=prompt)])
-                return result
+            agent = get_agent(parameters)
+            prompt = INSTRUCTIONS_PROMPT.format(question=question)
+            result = await agent.run([TextInput(text=prompt)], question_id=f"q{question_index:03d}")
+            return result
 
     tasks = [process_question(question, i + 1) for i, question in enumerate(questions)]
 
@@ -43,24 +38,28 @@ async def run_tests_parallel(
     for question, result in zip(questions, results):
         if isinstance(result, Exception):
             formatted_results.append({"question": question, "success": False, "error": str(result)})
-            print(f"\n❌ Question failed: {question}\n   Error: {result}\n")
+            print(f"\nFAIL Question failed: {question}\n   Error: {result}\n")
         else:
-            formatted_results.append({"question": question, "success": result.success, "result": result.model_dump()})
+            formatted_results.append(
+                {"question": question, "success": result.success, "result": result.model_dump(mode="json")}
+            )
             if not result.success and result.final_error:
                 print(
-                    f"\n❌ Question failed: {question}\n   Turns: {result.total_turns}\n   Error: [{result.final_error.type}] {result.final_error.message}\n"
+                    f"\nFAIL Question failed: {question}\n   Turns: {result.total_turns}\n   Error: [{result.final_error.type}] {result.final_error.message}\n"
                 )
             else:
                 print(
-                    f"\n✅ Question succeeded: {question}\n   Turns: {result.total_turns}\n   Result: {result.final_answer}\n"
+                    f"\nOK Question succeeded: {question}\n   Turns: {result.total_turns}\n   Result: {result.final_answer}\n"
                 )
 
-    results_file = run_dir / "results.json"
-    results_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(results_file, "w") as f:
-        json.dump(formatted_results, f, indent=2)
-
-    print(f"\nResults and logs saved to: {run_dir}")
+    # Write results next to agent logs (use first result's output_dir parent)
+    non_error_results = [r for r in results if not isinstance(r, Exception)]
+    if non_error_results:
+        results_dir = non_error_results[0].output_dir.parent
+        results_file = results_dir / "results.json"
+        with open(results_file, "w") as f:
+            json.dump(formatted_results, f, indent=2)
+        print(f"\nResults saved to: {results_file}")
 
     return formatted_results
 

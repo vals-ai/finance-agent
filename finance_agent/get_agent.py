@@ -1,6 +1,4 @@
-import logging
-
-from model_library.agent import Agent, AgentConfig, AgentHooks, default_before_query, truncate_oldest
+from model_library.agent import Agent, AgentConfig, AgentHooks, TurnLimit, default_before_query, truncate_oldest
 from model_library.base import LLM, LLMConfig
 from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
@@ -27,7 +25,6 @@ class Parameters(BaseModel):
 
 def get_agent(
     parameters: Parameters,
-    logger_name: str | None = None,
     llm: LLM | None = None,
 ) -> Agent:
     """Helper method to instantiate an agent with the given parameters"""
@@ -62,7 +59,10 @@ def get_agent(
     return Agent(
         llm=llm,
         tools=selected_tools,
-        config=AgentConfig(max_turns=parameters.max_turns),
+        name="finance",
+        config=AgentConfig(
+            turn_limit=TurnLimit(max_turns=parameters.max_turns),
+            time_limit=None,
+        ),
         hooks=AgentHooks(before_query=_before_query),
-        logger=logging.getLogger(logger_name or f"agent.{parameters.model_name}"),
     )
