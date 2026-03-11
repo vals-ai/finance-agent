@@ -10,7 +10,7 @@ from model_library.agent import Tool, ToolOutput
 from model_library.base import LLM
 from tavily import AsyncTavilyClient
 
-from finance_agent.exceptions import retry_http_errors
+from .exceptions import retry_http_errors
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]

@@ -10,9 +10,9 @@ from model_library.base import LLMConfig
 from model_library.base.input import TextInput
 from tqdm.asyncio import tqdm
 
-from finance_agent.get_agent import Parameters, get_agent
-from finance_agent.prompt import INSTRUCTIONS_PROMPT
-from finance_agent.tools import VALID_TOOLS
+from .get_agent import Parameters, get_agent
+from .prompt import INSTRUCTIONS_PROMPT
+from .tools import VALID_TOOLS
 
 
 async def run_tests_parallel(
