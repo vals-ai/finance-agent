@@ -23,7 +23,7 @@ def retry_http_errors(*status_codes: int) -> Callable:
     def decorator(func: Callable) -> Callable:
         @backoff.on_exception(
             backoff.expo,
-            aiohttp.ClientResponseError,
+            Exception,  # was: aiohttp.ClientResponseError — broadened for non-aiohttp errors (e.g. Tavily TypeError)
             max_tries=100,
             max_value=120,
             base=2,
