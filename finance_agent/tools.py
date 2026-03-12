@@ -109,26 +109,14 @@ class TavilyWebSearch(Tool):
 
             kwargs["start_date"] = start_date
 
-        try:
-            response = await self.client.search(
-                search_depth="fast",
-                end_date=end_date,
-                max_results=number_of_results,
-                chunks_per_source=1,
-                query=search_query,
-                **kwargs,
-            )
-        except TypeError as e:
-            if "catching classes that do not inherit from BaseException" in str(e):
-                # Tavily's internal exception handling is broken - extract the real error
-                # from the exception chain (__context__ holds the original API error)
-                original_error = e.__context__
-                root_cause = f" | Original API error: {type(original_error).__name__}: {original_error}" if original_error else ""
-                error_msg = f"Tavily web_search failed{root_cause}"
-                logger = logging.getLogger(__name__)
-                logger.warning(f"[TOOL: WEB_SEARCH] {error_msg}")
-                raise RuntimeError(error_msg) from original_error
-            raise
+        response = await self.client.search(
+            search_depth="fast",
+            end_date=end_date,
+            max_results=number_of_results,
+            chunks_per_source=1,
+            query=search_query,
+            **kwargs,
+        )
 
         return response.get("results", [])
 

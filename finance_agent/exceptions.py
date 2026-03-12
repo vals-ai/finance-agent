@@ -4,6 +4,7 @@ from typing import Any
 
 import aiohttp
 import backoff
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ def retry_http_errors(*status_codes: int) -> Callable:
             if (
                 isinstance(exception, aiohttp.ClientResponseError)
                 and exception.status == code
+                or isinstance(exception, httpx.HTTPStatusError)
+                and exception.response.status_code == code
                 or str(code) in str(exception)
             ):
                 logger.error(f"{code} error: {exception}")
@@ -23,7 +26,7 @@ def retry_http_errors(*status_codes: int) -> Callable:
     def decorator(func: Callable) -> Callable:
         @backoff.on_exception(
             backoff.expo,
-            Exception,  # was: aiohttp.ClientResponseError — broadened for non-aiohttp errors (e.g. Tavily TypeError)
+            Exception,
             max_tries=100,
             max_value=120,
             base=2,
