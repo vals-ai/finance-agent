@@ -3,6 +3,7 @@ from typing import Any
 
 import aiohttp
 import backoff
+import httpx
 from logger import get_logger
 
 exceptions_logger = get_logger(__name__)
@@ -11,7 +12,13 @@ exceptions_logger = get_logger(__name__)
 def retry_http_errors(*status_codes: int) -> Callable:
     def should_retry(exception: Exception) -> bool:
         for code in status_codes:
-            if isinstance(exception, aiohttp.ClientResponseError) and exception.status == code or str(code) in str(exception):
+            if (
+                isinstance(exception, aiohttp.ClientResponseError)
+                and exception.status == code
+                or isinstance(exception, httpx.HTTPStatusError)
+                and exception.response.status_code == code
+                or str(code) in str(exception)
+            ):
                 exceptions_logger.error(f"{code} error: {exception}")
                 return True
         return False
@@ -19,7 +26,7 @@ def retry_http_errors(*status_codes: int) -> Callable:
     def decorator(func: Callable) -> Callable:
         @backoff.on_exception(
             backoff.expo,
-            aiohttp.ClientResponseError,
+            Exception,
             max_tries=100,
             max_value=120,
             base=2,
