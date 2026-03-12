@@ -239,15 +239,16 @@ class EDGARSearch(Tool):
         if ciks:
             payload["ciks"] = ciks
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": self._key_rotator.next_key(),
-        }
+        async with self._key_rotator.acquire() as key:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": key,
+            }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
-                response.raise_for_status()
-                result = await response.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
+                    response.raise_for_status()
+                    result = await response.json()
 
         results = result.get("filings", [])
         results = results[: int(top_n_results)]
