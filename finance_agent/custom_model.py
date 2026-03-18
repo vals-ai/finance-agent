@@ -36,20 +36,14 @@ async def get_custom_model(
             token_retry_params=TokenRetryParams.model_validate(token_retry_params),
         )
 
-    question_counter = 0
-
-    async def custom_call(test_input: str):
-        nonlocal question_counter
-        question_counter += 1
-        question_idx = question_counter
-
+    async def custom_call(test_input: str, files: dict, context: dict, question_id: str, run_id: str):
         prompt = INSTRUCTIONS_PROMPT.format(question=test_input)
 
         agent = get_agent(params, llm=llm)
-        result = await agent.run([TextInput(text=prompt)], question_id=f"q{question_idx:03d}")
+        result = await agent.run([TextInput(text=prompt)], question_id=question_id, run_id=run_id)
 
         if not result.success and result.final_error:
-            print(f"\nFAIL Question {question_idx} failed: [{result.final_error.type}] {result.final_error.message}\n")
+            print(f"\nFAIL {question_id} failed: [{result.final_error.type}] {result.final_error.message}\n")
         return OutputObject.from_agent_result(result, count_tool_metadata=True)
 
     return custom_call
