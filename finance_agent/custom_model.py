@@ -1,29 +1,11 @@
 from typing import Any
 
-from model_library.agent import AgentResult
 from model_library.base import LLMConfig, TokenRetryParams
 from model_library.base.input import TextInput
 from model_library.registry_utils import get_registry_model
-from vals.sdk.types import OutputObject  # pyright: ignore
 
 from .get_agent import Parameters, get_agent
 from .prompt import INSTRUCTIONS_PROMPT
-
-
-def agent_result_to_output_object(result: AgentResult) -> OutputObject:
-    metadata = result.final_aggregated_metadata
-    return OutputObject(
-        llm_output=result.final_answer,
-        in_tokens=metadata.in_tokens,
-        out_tokens=metadata.out_tokens,
-        reasoning_tokens=metadata.reasoning_tokens,
-        cache_read_tokens=metadata.cache_read_tokens,
-        cache_write_tokens=metadata.cache_write_tokens,
-        duration=result.final_duration_seconds,
-        cost=metadata.cost.total if metadata.cost else None,
-        output_context=result.model_dump(),
-        error=str(result.final_error) if result.final_error else None,
-    )
 
 
 def create_override_config(**kwargs: object) -> LLMConfig:
@@ -39,6 +21,8 @@ async def get_custom_model(
     *_args: object,
     **_kwargs: object,
 ):
+    from vals.sdk.types import OutputObject  # pyright: ignore
+
     params = Parameters(
         model_name=model_name,
         llm_config=create_override_config(**parameters),
@@ -66,6 +50,6 @@ async def get_custom_model(
 
         if not result.success and result.final_error:
             print(f"\nFAIL Question {question_idx} failed: [{result.final_error.type}] {result.final_error.message}\n")
-        return agent_result_to_output_object(result)
+        return OutputObject.from_agent_result(result, count_tool_metadata=True)
 
     return custom_call
