@@ -95,6 +95,7 @@ class Agent(ABC):
         self.instructions_prompt: str = instructions_prompt
 
         self.logger = get_logger(logger_name) if logger_name else agent_logger
+        self.llm.logger = self.logger
         self.tools_logger = get_logger(tools_logger_name) if tools_logger_name else None
         # NOTE: Don't set self.llm.logger here - the LLM is shared across agents.
         # Instead, pass query_logger to each llm.query() call.
@@ -237,7 +238,7 @@ class Agent(ABC):
 
         try:
             response: QueryResult = await self.llm.query(
-                input=self.messages, tools=tool_definitions, query_logger=self.logger
+                input=self.messages, tools=tool_definitions
             )
         except MaxContextWindowExceededError:
             raise
@@ -335,7 +336,11 @@ class Agent(ABC):
         final_answer = None
         breaking_error = None
 
-        while turn_count < self.max_turns and breaking_error is None and final_answer is None:
+        while (
+            turn_count < self.max_turns
+            and breaking_error is None
+            and final_answer is None
+        ):
             turn_count += 1
 
             try:
@@ -366,7 +371,7 @@ class Agent(ABC):
                     text=f"An error occurred: {e}. Please review what happened and try a different approach."
                 )
                 self.messages.append(error_message)
-                
+
                 # breaks out of turn loop
                 breaking_error = e
 
@@ -387,7 +392,10 @@ class Agent(ABC):
         elif turn_count >= self.max_turns:
             return "Max turns reached without final answer.", metadata
         elif breaking_error:
-            return f"Unable to generate answer due to the following error: {breaking_error}", metadata
+            return (
+                f"Unable to generate answer due to the following error: {breaking_error}",
+                metadata,
+            )
         else:
             # this should never happen
             return "Unable to generate answer for unknown reason", metadata

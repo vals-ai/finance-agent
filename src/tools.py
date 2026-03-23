@@ -8,12 +8,13 @@ from typing import Any
 
 import aiohttp
 from bs4 import BeautifulSoup
-from exceptions import retry_http_errors
-from logger import VERBOSE, get_logger
 from model_library.base import LLM, ToolBody, ToolDefinition
 from pydantic import computed_field
 from tavily import AsyncTavilyClient
 from typing_extensions import override
+
+from exceptions import retry_http_errors
+from logger import VERBOSE, get_logger
 
 tool_logger = get_logger(__name__)
 
@@ -622,7 +623,7 @@ class RetrieveInformation(Tool):
         )
         prompt = self._format_prompt(prompt, ranges_dict, data_storage)
 
-        response = await llm.query(prompt, query_logger=logger)
+        response = await llm.query(prompt)
 
         return {
             "retrieval": response.output_text_str,
