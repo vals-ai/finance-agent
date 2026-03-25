@@ -395,7 +395,7 @@ class ParseHtmlPage(Tool):
     def __init__(self):
         super().__init__()
 
-    @retry_http_errors(429, 503)
+    @retry_http_errors(429)
     async def _parse_html_page(self, url: str) -> str:
         async with aiohttp.ClientSession() as session:
             try:

@@ -292,6 +292,8 @@ class Agent(ABC):
                 ]
                 self.logger.info(f"\033[1;32m[FINAL ANSWER]\033[0m {final_answer}")
                 return final_answer, turn_metadata
+        else:
+            self.messages.append(TextInput(text="Continue."))
 
         return None, turn_metadata
 
