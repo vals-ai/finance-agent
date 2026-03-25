@@ -1,5 +1,4 @@
 from model_library.agent import Agent, AgentConfig, AgentHooks, TurnLimit, TurnResult, default_before_query, truncate_oldest
-from model_library.agent.metadata import AgentTurn, ErrorTurn, SerializableException
 from model_library.base import LLM, LLMConfig
 from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
@@ -61,22 +60,6 @@ def get_agent(
         """Only stop when a done tool is called, not on text-only responses"""
         return False
 
-    def _determine_answer(
-        state: dict,
-        turns: list[AgentTurn | ErrorTurn],
-        final_error: SerializableException | None,
-    ) -> str:
-        """Only extract answer from submit_final_result tool, not from LLM text"""
-        if final_error or not turns:
-            return ""
-        last_turn = turns[-1]
-        if isinstance(last_turn, ErrorTurn):
-            return ""
-        done_record = next((r for r in last_turn.tool_call_records if r.tool_output.done), None)
-        if done_record:
-            return done_record.tool_output.output
-        return ""
-
     return Agent(
         llm=llm,
         tools=selected_tools,
@@ -88,6 +71,5 @@ def get_agent(
         hooks=AgentHooks(
             before_query=_before_query,
             should_stop=_should_stop,
-            determine_answer=_determine_answer,
         ),
     )
