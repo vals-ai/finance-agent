@@ -1,5 +1,5 @@
 from model_library.agent import Agent, AgentConfig, AgentHooks, TurnLimit, TurnResult, default_before_query, truncate_oldest
-from model_library.base import LLM, LLMConfig
+from model_library.base import LLM, LLMConfig, RawResponse, TextInput
 from model_library.base.input import InputItem
 from model_library.exceptions import MaxContextWindowExceededError
 from model_library.registry_utils import get_registry_model
@@ -67,9 +67,15 @@ def get_agent(
     #   and default_determine_answer finds the done record before reaching the text fallback.
 
     def _before_query(history: list[InputItem], last_error: Exception | None) -> list[InputItem]:
-        """Truncate on context window overflow, re-raise all other errors (stops the loop)"""
+        """Truncate on context window overflow, re-raise all other errors (stops the loop).
+
+        Also injects "Continue." when the previous turn had no tool calls
+        (last item in history is a RawResponse, meaning no ToolResult was appended).
+        """
         if isinstance(last_error, MaxContextWindowExceededError):
             return truncate_oldest(history)
+        if history and isinstance(history[-1], RawResponse):
+            history.append(TextInput(text="Continue."))
         return default_before_query(history, last_error)
 
     def _should_stop(turn_result: TurnResult) -> bool:
