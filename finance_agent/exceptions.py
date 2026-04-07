@@ -9,9 +9,28 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def retry_http_errors(*status_codes: int) -> Callable:
+def retry_http_errors(*status_codes: int | tuple[int, str]) -> Callable:
+    """Retry on specific HTTP status codes. Each entry can be:
+    - an int: retry unconditionally on that status code
+    - a tuple (int, str): retry only if the URL contains the given string
+    """
+
+    parsed = []
+    for entry in status_codes:
+        if isinstance(entry, int):
+            parsed.append((entry, None))
+        else:
+            parsed.append((entry[0], entry[1]))
+
+    def _url_from_exception(exception: Exception) -> str:
+        if isinstance(exception, aiohttp.ClientResponseError) and exception.request_info:
+            return str(exception.request_info.url)
+        if isinstance(exception, httpx.HTTPStatusError):
+            return str(exception.request.url)
+        return ""
+
     def should_retry(exception: Exception) -> bool:
-        for code in status_codes:
+        for code, url_pattern in parsed:
             if (
                 isinstance(exception, aiohttp.ClientResponseError)
                 and exception.status == code
@@ -19,6 +38,8 @@ def retry_http_errors(*status_codes: int) -> Callable:
                 and exception.response.status_code == code
                 or str(code) in str(exception)
             ):
+                if url_pattern and url_pattern not in _url_from_exception(exception):
+                    continue
                 logger.error(f"{code} error: {exception}")
                 return True
         return False

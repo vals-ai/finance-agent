@@ -282,7 +282,7 @@ class ParseHtmlPage(Tool):
     }
     required = ["url", "key"]
 
-    @retry_http_errors(429, 503)
+    @retry_http_errors(429, (503, "sec.gov"))
     async def _parse_html_page(self, url: str) -> str:
         async with aiohttp.ClientSession() as session:
             try:
