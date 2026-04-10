@@ -84,7 +84,13 @@ To run your own harness or model, just modify the `get_custom_model` function as
 
 ## Deploying
 
-To push the agent to Valkyrie for benchmarking:
+First, install the [Agentic Harness](https://github.com/vals-ai/agentic-harness) CLI:
+
+```
+uv tool install -e /path/to/agentic-harness
+```
+
+Then push the agent for benchmarking:
 
 ```
 make push
