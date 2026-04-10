@@ -1,0 +1,34 @@
+name: finance-agent
+install_cmd: bash setup.sh
+run_cmd: >-
+  finance-agent --model {model} --question-file {problem_statement_path} &&
+  python -c "
+    import json, glob;
+    path = glob.glob('logs/**/results.json', recursive=True)[0];
+    data = json.load(open(path));
+    open('result.txt', 'w').write(data[0]['result']['final_answer'])
+  "
+final_output: /workspace/logs
+defaults:
+  model:
+    type: str
+    required: true
+secrets:
+  OPENAI_API_KEY: prodBenchmarksInfraApiKeys
+  GOOGLE_API_KEY: prodBenchmarksInfraApiKeys
+  COHERE_API_KEY: prodBenchmarksInfraApiKeys
+  ANTHROPIC_API_KEY: prodBenchmarksInfraApiKeys
+  MISTRAL_API_KEY: prodBenchmarksInfraApiKeys
+  XAI_API_KEY: prodBenchmarksInfraApiKeys
+  AI21LABS_API_KEY: prodBenchmarksInfraApiKeys
+  FIREWORKS_API_KEY: prodBenchmarksInfraApiKeys
+  DEEPSEEK_KEY: prodBenchmarksInfraApiKeys
+  AZURE_API_KEY: prodBenchmarksInfraApiKeys
+  DASHSCOPE_API_KEY: prodBenchmarksInfraApiKeys
+  PERPLEXITY_KEY: prodBenchmarksInfraApiKeys
+  ZAI_API_KEY: prodBenchmarksInfraApiKeys
+  KIMI_API_KEY: prodBenchmarksInfraApiKeys
+  MERCURY_KEY: prodBenchmarksInfraApiKeys
+  MINIMAX_API_KEY: prodBenchmarksInfraApiKeys
+  SEC_EDGAR_API_KEY: localEvalInfraSecApiKey
+  TAVILY_API_KEY: prodEvalInfraTavilyKey
