@@ -32,11 +32,8 @@ def retry_http_errors(*status_codes: int | tuple[int, str]) -> Callable:
     def should_retry(exception: Exception) -> bool:
         for code, url_pattern in parsed:
             if (
-                isinstance(exception, aiohttp.ClientResponseError)
-                and exception.status == code
-                or isinstance(exception, httpx.HTTPStatusError)
-                and exception.response.status_code == code
-                or str(code) in str(exception)
+                (isinstance(exception, aiohttp.ClientResponseError) and exception.status == code)
+                or (isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code == code)
             ):
                 if url_pattern and url_pattern not in _url_from_exception(exception):
                     continue
