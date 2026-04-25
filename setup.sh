@@ -16,7 +16,7 @@ make install
 # Wrapper script so `finance-agent` is on PATH from anywhere
 cat > /usr/local/bin/finance-agent << 'WRAPPER'
 #!/bin/bash
-source /bundle/finance-agent/.venv/bin/activate
+source /bundle/docent-finance-agent/.venv/bin/activate
 exec finance-agent "$@"
 WRAPPER
 chmod +x /usr/local/bin/finance-agent

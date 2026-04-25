@@ -1,13 +1,9 @@
-name: finance-agent
+name: docent-finance-agent
 install_cmd: bash setup.sh
 run_cmd: >-
   finance-agent --model {model} --question-file {problem_statement_path} &&
-  python -c "
-    import json, glob;
-    path = glob.glob('logs/**/results.json', recursive=True)[0];
-    data = json.load(open(path));
-    open('result.txt', 'w').write(data[0]['result']['final_answer'])
-  "
+  python -c "import json, glob; path = glob.glob('logs/**/results.json', recursive=True)[0]; data = json.load(open(path)); open('result.txt', 'w').write(data[0]['result']['final_answer'])"
+ingest_cmd: 'TASK_DIR=$(dirname $(find "$VALKYRIE_AGENT_OUTPUT_PATH" -type d -name turns | head -1)) && .venv/bin/model-library-ingest "$TASK_DIR" --out "$VALKYRIE_AGENT_RUN_OUT_PATH"'
 final_output: /workspace/logs
 defaults:
   model:

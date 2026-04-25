@@ -32,4 +32,4 @@ typecheck: venv_check
 	@uv run basedpyright
 
 push:
-	valkyrie agent push . --name finance-agent
+	valkyrie agent push . --name docent-finance-agent
