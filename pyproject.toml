@@ -31,7 +31,7 @@ build-backend = "hatchling.build"
 packages = ["finance_agent"]
 
 [tool.uv.sources]
-model-library = { path = "wheels/model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl" }
+model-library = { path = "wheels/model_library-0.1.13.dev183+gd461e5e36-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

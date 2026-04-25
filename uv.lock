@@ -644,7 +644,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2.2.1" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "model-library", extras = ["docent"], path = "wheels/model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl" },
+    { name = "model-library", extras = ["docent"], path = "wheels/model_library-0.1.13.dev183+gd461e5e36-py3-none-any.whl" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sec-api", specifier = ">=1.0.32" },
     { name = "tavily-python", specifier = ">=0.7.23" },
@@ -1466,8 +1466,8 @@ wheels = [
 
 [[package]]
 name = "model-library"
-version = "0.1.13.dev182+g31c199b44"
-source = { path = "wheels/model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl" }
+version = "0.1.13.dev183+gd461e5e36"
+source = { path = "wheels/model_library-0.1.13.dev183+gd461e5e36-py3-none-any.whl" }
 dependencies = [
     { name = "ai21" },
     { name = "anthropic", extra = ["aiohttp"] },
@@ -1487,7 +1487,7 @@ dependencies = [
     { name = "xai-sdk" },
 ]
 wheels = [
-    { filename = "model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl", hash = "sha256:444a7652f6d3f4b9b4e40964f1722ba528fc0177b216da3f32409f2219d29581" },
+    { filename = "model_library-0.1.13.dev183+gd461e5e36-py3-none-any.whl", hash = "sha256:142ef0c87b992087e74fe6891a6ebfcf7042ea0bae4f0c168e32b3c23e64fc8a" },
 ]
 
 [package.optional-dependencies]
