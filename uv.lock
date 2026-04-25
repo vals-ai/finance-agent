@@ -644,7 +644,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2.2.1" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "model-library", extras = ["docent"], git = "ssh://git@github.com/vals-ai/model-proxy.git?rev=oa%2Fadd-ingest-script" },
+    { name = "model-library", extras = ["docent"], path = "wheels/model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sec-api", specifier = ">=1.0.32" },
     { name = "tavily-python", specifier = ">=0.7.23" },
@@ -1466,8 +1466,8 @@ wheels = [
 
 [[package]]
 name = "model-library"
-version = "0.1.13.dev181+gc2de7adbb"
-source = { git = "ssh://git@github.com/vals-ai/model-proxy.git?rev=oa%2Fadd-ingest-script#c2de7adbbc8aba7ee6822abd593c00c223387ec9" }
+version = "0.1.13.dev182+g31c199b44"
+source = { path = "wheels/model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl" }
 dependencies = [
     { name = "ai21" },
     { name = "anthropic", extra = ["aiohttp"] },
@@ -1486,11 +1486,36 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "xai-sdk" },
 ]
+wheels = [
+    { filename = "model_library-0.1.13.dev182+g31c199b44-py3-none-any.whl", hash = "sha256:444a7652f6d3f4b9b4e40964f1722ba528fc0177b216da3f32409f2219d29581" },
+]
 
 [package.optional-dependencies]
 docent = [
     { name = "docent-python" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "ai21", specifier = ">=4.3.0,<5.0" },
+    { name = "anthropic", extras = ["aiohttp"], specifier = ">=0.89.0,<1.0" },
+    { name = "backoff", specifier = ">=2.2.1,<3.0" },
+    { name = "boto3", specifier = ">=1.38.27,<2.0" },
+    { name = "docent-python", marker = "extra == 'docent'", specifier = ">=0.1.55a0" },
+    { name = "google-cloud-storage", specifier = ">=3.9.0,<4.0" },
+    { name = "google-genai", extras = ["aiohttp"], specifier = ">=1.67.0,<2.0" },
+    { name = "mistralai", specifier = ">=2.0.4,<3.0" },
+    { name = "openai", extras = ["aiohttp"], specifier = ">=2.28.0,<3.0" },
+    { name = "pillow", specifier = ">=12.1.1,<13.0" },
+    { name = "pydantic", specifier = ">=2.12.5,<3.0" },
+    { name = "pyyaml", specifier = ">=6.0.3,<7.0" },
+    { name = "redis", specifier = ">=6.4.0,<7.0" },
+    { name = "rich", specifier = ">=14.3.3,<15.0" },
+    { name = "tiktoken", specifier = ">=0.12.0,<1.0" },
+    { name = "typing-extensions", specifier = ">=4.15.0,<5.0" },
+    { name = "xai-sdk", specifier = ">=1.7.0,<2.0" },
+]
+provides-extras = ["docent"]
 
 [[package]]
 name = "multidict"
