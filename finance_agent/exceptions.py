@@ -4,52 +4,41 @@ from typing import Any
 
 import aiohttp
 import backoff
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
-def _get_http_status(exception: Exception) -> int | None:
-    if isinstance(exception, aiohttp.ClientResponseError):
-        return exception.status
-
-    return None
-
-
-def _get_request_url(exception: Exception) -> str | None:
-    if isinstance(exception, aiohttp.ClientResponseError):
-        return str(exception.request_info.real_url)
-
-    return None
-
-
-def retry_http_errors(
-    *status_codes: int,
-    url_patterns: dict[int, list[str]] | None = None,
-) -> Callable:
-    """Retry on specific HTTP status codes with exponential backoff.
-
-    Args:
-        status_codes: Status codes to always retry on.
-        url_patterns: Optional mapping of status code -> list of domain substrings.
-            When provided, that status code is only retried if the request URL
-            contains one of the specified substrings.
+def retry_http_errors(*status_codes: int | tuple[int, str]) -> Callable:
+    """Retry on specific HTTP status codes. Each entry can be:
+    - an int: retry unconditionally on that status code
+    - a tuple (int, str): retry only if the URL contains the given string
     """
 
+    parsed = []
+    for entry in status_codes:
+        if isinstance(entry, int):
+            parsed.append((entry, None))
+        else:
+            parsed.append((entry[0], entry[1]))
+
+    def _url_from_exception(exception: Exception) -> str:
+        if isinstance(exception, aiohttp.ClientResponseError) and exception.request_info:
+            return str(exception.request_info.url)
+        if isinstance(exception, httpx.HTTPStatusError):
+            return str(exception.request.url)
+        return ""
+
     def should_retry(exception: Exception) -> bool:
-        status = _get_http_status(exception)
-        if status is None:
-            return False
-
-        if status in status_codes:
-            logger.error(f"{status} error: {exception}")
-            return True
-
-        if url_patterns and status in url_patterns:
-            url = _get_request_url(exception)
-            if url and any(pattern in url for pattern in url_patterns[status]):
-                logger.error(f"{status} error: {exception}")
+        for code, url_pattern in parsed:
+            if (
+                (isinstance(exception, aiohttp.ClientResponseError) and exception.status == code)
+                or (isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code == code)
+            ):
+                if url_pattern and url_pattern not in _url_from_exception(exception):
+                    continue
+                logger.error(f"{code} error: {exception}")
                 return True
-
         return False
 
     def decorator(func: Callable) -> Callable:
