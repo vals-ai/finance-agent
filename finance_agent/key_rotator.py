@@ -4,7 +4,6 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-
 DEFAULT_MAX_CONCURRENT = int(os.getenv("KEY_ROTATOR_MAX_CONCURRENT", "50"))
 
 
