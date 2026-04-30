@@ -40,7 +40,7 @@ async def get_custom_model(
         prompt = INSTRUCTIONS_PROMPT.format(question=test_input)
 
         agent = get_agent(params, llm=llm)
-        result = await agent.run([TextInput(text=prompt)], question_id=question_id, run_id=run_id)
+        result = await agent.run([TextInput(text=prompt)], question_id=question_id, run_id=run_id, docent_ingest=True)
 
         if not result.success and result.final_error:
             print(f"\nFAIL {question_id} failed: [{result.final_error.type}] {result.final_error.message}\n")
