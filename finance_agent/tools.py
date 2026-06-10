@@ -452,14 +452,7 @@ class RetrieveInformation(Tool):
             else:
                 formatted_data[key] = doc_content
 
-        formatted_prompt = re.sub(r"{{([^{}]+)}}", r"{\1}", prompt)
-
-        try:
-            return formatted_prompt.format(**formatted_data)
-        except KeyError as e:
-            raise KeyError(
-                f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(state.keys())}"
-            )
+        return re.sub(r"{{([^{}]+)}}", lambda match: str(formatted_data[match.group(1)]), prompt)
 
     async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
         try:
