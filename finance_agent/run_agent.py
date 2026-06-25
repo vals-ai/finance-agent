@@ -113,7 +113,7 @@ async def main():
     args = parser.parse_args()
 
     ENV_FILE = Path(".env")
-    load_dotenv(override=True, dotenv_path=ENV_FILE)
+    load_dotenv(override=False, dotenv_path=ENV_FILE)
 
     if args.question_file:
         with open(args.question_file) as f:
