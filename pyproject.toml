@@ -16,7 +16,10 @@ dependencies = [
     "dotenv>=0.9.9",
     "requests>=2.32.5",
     "sec-api>=1.0.32",
-    "model-library==0.1.19",
+    # Vendored as a wheel under `wheels/` because model-proxy is private and the
+    # Valkyrie sandbox can't authenticate to GitHub. The [docent] extra pulls in
+    # docent-python (public) so we can reuse `model_library.ingest.build_agent_run`.
+    "model-library[docent]",
     "tavily-python>=0.7.23",
 ]
 
@@ -26,6 +29,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["finance_agent"]
+
+[tool.uv.sources]
+model-library = { path = "wheels/model_library-0.1.13.dev183+gd461e5e36-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

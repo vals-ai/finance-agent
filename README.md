@@ -82,6 +82,20 @@ A list of available models can be found at our [model library](https://github.co
 
 To run your own harness or model, just modify the `get_custom_model` function as needed. To see the full documentation on how the SDK works, visit [our docs](https://docs.vals.ai/sdk/running_suites).
 
+## Deploying
+
+First, install the [Agentic Harness](https://github.com/vals-ai/agentic-harness) CLI:
+
+```
+uv tool install -e /path/to/agentic-harness
+```
+
+Then push the agent for benchmarking:
+
+```
+make push
+```
+
 ## Logs
 
 The agent writes detailed logs to the `logs/` directory. Each run creates a timestamped directory with per-question log files containing tool usage, token counts, and error tracking.
