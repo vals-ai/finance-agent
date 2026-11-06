@@ -46,3 +46,6 @@ exclude = [
 ]
 typeCheckingMode = "basic"
 reportExplicitAny = false
+
+[tool.uv]
+exclude-newer = "7 days"

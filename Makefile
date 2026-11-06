@@ -12,7 +12,7 @@ PYTHON_VERSION ?= 3.11
 install:
 	uv venv --python $(PYTHON_VERSION)
 	uv sync --dev
-	uv tool install .
+	uv tool install --exclude-newer "7 days" .
 	@echo "🎉 Done! Run 'source .venv/bin/activate' to activate the environment locally."
 
 venv_check:
