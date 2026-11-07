@@ -441,25 +441,20 @@ class RetrieveInformation(Tool):
 
     def _format_prompt(self, prompt: str, ranges_dict: dict[str, tuple[int, int]], state: dict[str, Any]) -> str:
         """Substitute data storage content into prompt placeholders, applying character ranges."""
-        keys = re.findall(r"{{([^{}]+)}}", prompt)
-        formatted_data = {}
 
-        for key in keys:
+        def substitute(match: re.Match[str]) -> str:
+            key = match.group(1)
+            if key not in state:
+                raise KeyError(
+                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(state.keys())}"
+                )
             doc_content = state[key]
             if key in ranges_dict:
                 start_idx, end_idx = ranges_dict[key]
-                formatted_data[key] = doc_content[start_idx:end_idx]
-            else:
-                formatted_data[key] = doc_content
+                return str(doc_content[start_idx:end_idx])
+            return str(doc_content)
 
-        formatted_prompt = re.sub(r"{{([^{}]+)}}", r"{\1}", prompt)
-
-        try:
-            return formatted_prompt.format(**formatted_data)
-        except KeyError as e:
-            raise KeyError(
-                f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(state.keys())}"
-            )
+        return re.sub(r"{{([^{}]+)}}", substitute, prompt)
 
     async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
         try:
