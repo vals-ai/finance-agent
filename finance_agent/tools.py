@@ -1,10 +1,15 @@
 import json
+import ipaddress
 import logging
 import os
 import re
+import socket
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import aiohttp
+from aiohttp.abc import ResolveResult
+from aiohttp.resolver import ThreadedResolver
 from bs4 import BeautifulSoup
 from model_library.agent import Tool, ToolOutput
 from model_library.base import LLM
@@ -265,6 +270,46 @@ class EDGARSearch(Tool):
             return ToolOutput(output=error_msg, error=error_msg)
 
 
+
+REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+MAX_REDIRECTS = 10
+
+
+def is_public_address(host: str) -> bool:
+    address = ipaddress.ip_address(host.split("%", 1)[0])
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_global
+
+
+def _require_public_host(host: str) -> None:
+    if not is_public_address(host):
+        raise ValueError(f"{host} is not a public internet address.")
+
+
+def require_public_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"Only http and https URLs can be fetched: {url}")
+    try:
+        ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        return
+    _require_public_host(parsed.hostname)
+
+
+class PublicResolver(ThreadedResolver):
+    """Resolve hostnames, refusing any that point at a non-public address."""
+
+    async def resolve(
+        self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
+    ) -> list[ResolveResult]:
+        results = await super().resolve(host, port, family)
+        for result in results:
+            _require_public_host(result["host"])
+        return results
+
+
 class ParseHtmlPage(Tool):
     name = "parse_html_page"
     description = (
@@ -284,15 +329,26 @@ class ParseHtmlPage(Tool):
 
     @retry_http_errors(429, (503, "sec.gov"))
     async def _parse_html_page(self, url: str) -> str:
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(resolver=PublicResolver())
+        async with aiohttp.ClientSession(connector=connector) as session:
             try:
-                async with session.get(
-                    url,
-                    timeout=aiohttp.ClientTimeout(total=60),
-                    headers={"User-Agent": "ValsAI/antoine@vals.ai"},
-                ) as response:
-                    response.raise_for_status()
-                    html_content = await response.text()
+                for _ in range(MAX_REDIRECTS + 1):
+                    require_public_url(url)
+                    async with session.get(
+                        url,
+                        allow_redirects=False,
+                        timeout=aiohttp.ClientTimeout(total=60),
+                        headers={"User-Agent": "ValsAI/antoine@vals.ai"},
+                    ) as response:
+                        location = response.headers.get("Location")
+                        if response.status in REDIRECT_STATUSES and location:
+                            url = urljoin(url, location)
+                            continue
+                        response.raise_for_status()
+                        html_content = await response.text()
+                        break
+                else:
+                    raise ValueError(f"{url} redirected more than {MAX_REDIRECTS} times.")
             except Exception as e:
                 if len(str(e)) == 0:
                     raise TimeoutError(
@@ -441,25 +497,20 @@ class RetrieveInformation(Tool):
 
     def _format_prompt(self, prompt: str, ranges_dict: dict[str, tuple[int, int]], state: dict[str, Any]) -> str:
         """Substitute data storage content into prompt placeholders, applying character ranges."""
-        keys = re.findall(r"{{([^{}]+)}}", prompt)
-        formatted_data = {}
 
-        for key in keys:
+        def substitute(match: re.Match[str]) -> str:
+            key = match.group(1)
+            if key not in state:
+                raise KeyError(
+                    f"ERROR: The key '{key}' was not found in the data storage. Available keys are: {', '.join(state.keys())}"
+                )
             doc_content = state[key]
             if key in ranges_dict:
                 start_idx, end_idx = ranges_dict[key]
-                formatted_data[key] = doc_content[start_idx:end_idx]
-            else:
-                formatted_data[key] = doc_content
+                return str(doc_content[start_idx:end_idx])
+            return str(doc_content)
 
-        formatted_prompt = re.sub(r"{{([^{}]+)}}", r"{\1}", prompt)
-
-        try:
-            return formatted_prompt.format(**formatted_data)
-        except KeyError as e:
-            raise KeyError(
-                f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(state.keys())}"
-            )
+        return re.sub(r"{{([^{}]+)}}", substitute, prompt)
 
     async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
         try:
