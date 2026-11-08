@@ -1,7 +1,9 @@
 import json
 import logging
+import math
 import os
 import re
+from decimal import Decimal
 from typing import Any
 
 import aiohttp
@@ -15,6 +17,34 @@ from .key_rotator import KeyRotator, get_rotator
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
+
+SEARCH_COST_PATH_ENV = "VALKYRIE_SEARCH_COST_PATH"
+# Pay-as-you-go price, https://docs.tavily.com/documentation/api-credits
+TAVILY_USD_PER_CREDIT = Decimal("0.008")
+
+
+def report_tavily_cost(response: dict[str, Any]) -> None:
+    """Append a Tavily call's cost to the Valkyrie search cost report, when the run asks for one.
+
+    The cost is the credits Tavily reports for the call (`include_usage=True`), keyed by its
+    request id so Valkyrie counts a call once. A response without usage is not reported.
+    """
+    path = os.environ.get(SEARCH_COST_PATH_ENV)
+    usage = response.get("usage")
+    credits = usage.get("credits") if isinstance(usage, dict) else None
+    if not path or isinstance(credits, bool) or not isinstance(credits, int | float):
+        return
+    if not math.isfinite(credits) or credits < 0:
+        return
+    charge = {"provider": "tavily", "amount_usd": str(TAVILY_USD_PER_CREDIT * Decimal(str(credits)))}
+    request_id = response.get("request_id")
+    if isinstance(request_id, str) and request_id:
+        charge["source_id"] = request_id
+    try:
+        with open(path, "a", encoding="utf-8") as report:
+            report.write(json.dumps(charge) + "\n")
+    except OSError as e:
+        logging.getLogger(__name__).warning(f"Could not write search cost report {path}: {e}")
 
 
 class SubmitFinalResult(Tool):
@@ -115,8 +145,10 @@ class TavilyWebSearch(Tool):
             max_results=number_of_results,
             chunks_per_source=1,
             query=search_query,
+            include_usage=True,
             **kwargs,
         )
+        report_tavily_cost(response)
 
         return response.get("results", [])
 
