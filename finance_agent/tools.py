@@ -1,7 +1,9 @@
 import json
 import logging
+import math
 import os
 import re
+from decimal import Decimal
 from typing import Any
 
 import aiohttp
@@ -15,6 +17,30 @@ from .key_rotator import KeyRotator, get_rotator
 
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
+
+
+def _report_tavily_cost(path: str, response: dict[str, Any], search_depth: str) -> None:
+    usage = response.get("usage")
+    credits = usage.get("credits") if isinstance(usage, dict) else None
+    if (
+        isinstance(credits, bool)
+        or not isinstance(credits, int | float)
+        or not math.isfinite(credits)
+        or credits < 0
+    ):
+        credits = 2 if search_depth == "advanced" else 1
+    charge = {
+        "provider": "tavily",
+        "amount_usd": str(Decimal("0.008") * Decimal(str(credits))),
+        "source_id": response.get("request_id"),
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as report:
+            report.write(json.dumps(charge) + "\n")
+    except OSError:
+        logging.getLogger(__name__).warning(
+            "Could not write search cost report %s", path, exc_info=True
+        )
 
 
 class SubmitFinalResult(Tool):
@@ -33,7 +59,9 @@ class SubmitFinalResult(Tool):
     }
     required: list[str] = ["final_result"]
 
-    async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
+    async def execute(
+        self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger
+    ) -> ToolOutput:
         try:
             final_result = args["final_result"]
             if not final_result:
@@ -88,18 +116,22 @@ class TavilyWebSearch(Tool):
     ) -> list[dict[str, Any]]:
         DATE_REGEX = r"^\d{4}-\d{2}-\d{2}$"
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
 
         if end_date:
             if not re.match(DATE_REGEX, end_date):
-                raise ValueError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+                raise ValueError(
+                    f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD."
+                )
 
             if end_date > MAX_END_DATE:
                 end_date = MAX_END_DATE
 
         if start_date:
             if not re.match(DATE_REGEX, start_date):
-                raise ValueError(f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+                raise ValueError(
+                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
+                )
             if start_date > MAX_END_DATE:
                 start_date = MAX_END_DATE
             if start_date > end_date:
@@ -109,18 +141,26 @@ class TavilyWebSearch(Tool):
 
             kwargs["start_date"] = start_date
 
+        cost_path = os.environ.get("VALKYRIE_SEARCH_COST_PATH")
+        if cost_path:
+            kwargs["include_usage"] = True
+        search_depth = "fast"
         response = await self.client.search(
-            search_depth="fast",
+            search_depth=search_depth,
             end_date=end_date,
             max_results=number_of_results,
             chunks_per_source=1,
             query=search_query,
             **kwargs,
         )
+        if cost_path:
+            _report_tavily_cost(cost_path, response, search_depth)
 
         return response.get("results", [])
 
-    async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
+    async def execute(
+        self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger
+    ) -> ToolOutput:
         try:
             results = await self._execute_search(**args)
             return ToolOutput(output=json.dumps(results, default=str))
@@ -201,10 +241,14 @@ class EDGARSearch(Tool):
         ciks: list[str] | str | None = None,
     ) -> list[str]:
         if form_types is not None and not isinstance(form_types, list):
-            raise ValueError(f"The parameter form_types must be a list if provided. Was of type {type(form_types)}")
+            raise ValueError(
+                f"The parameter form_types must be a list if provided. Was of type {type(form_types)}"
+            )
 
         if ciks is not None and not isinstance(ciks, list):
-            raise ValueError(f"The parameter ciks must be a list if provided. Was of type {type(ciks)}")
+            raise ValueError(
+                f"The parameter ciks must be a list if provided. Was of type {type(ciks)}"
+            )
 
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
         if not re.match(date_pattern, start_date):
@@ -246,7 +290,9 @@ class EDGARSearch(Tool):
             }
 
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.sec_api_url, json=payload, headers=headers) as response:
+                async with session.post(
+                    self.sec_api_url, json=payload, headers=headers
+                ) as response:
                     response.raise_for_status()
                     result = await response.json()
 
@@ -255,7 +301,9 @@ class EDGARSearch(Tool):
 
         return results
 
-    async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
+    async def execute(
+        self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger
+    ) -> ToolOutput:
         try:
             results = await self._execute_search(**args)
             return ToolOutput(output=json.dumps(results, default=str))
@@ -311,16 +359,19 @@ class ParseHtmlPage(Tool):
 
         return text
 
-    async def _save_tool_output(self, output: str, key: str, state: dict[str, Any]) -> str:
+    async def _save_tool_output(
+        self, output: str, key: str, state: dict[str, Any]
+    ) -> str:
         if not output:
             raise ValueError("HTML output was empty")
 
         tool_result = ""
         if key in state:
-            tool_result = (
-                "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
-            )
-        tool_result += f"SUCCESS: The result has been saved to the data storage under the key: {key}." + "\n"
+            tool_result = "WARNING: The key already exists in the data storage. The new result overwrites the old one.\n"
+        tool_result += (
+            f"SUCCESS: The result has been saved to the data storage under the key: {key}."
+            + "\n"
+        )
 
         state[key] = output
 
@@ -335,7 +386,9 @@ class ParseHtmlPage(Tool):
 
         return tool_result
 
-    async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
+    async def execute(
+        self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger
+    ) -> ToolOutput:
         try:
             url = args["url"]
             key = args["key"]
@@ -417,8 +470,14 @@ class RetrieveInformation(Tool):
                 raise ValueError(
                     "ERROR: Each item in input_character_ranges must be an object with 'key', 'start', and 'end' fields."
                 )
-            if "key" not in range_spec or "start" not in range_spec or "end" not in range_spec:
-                raise ValueError("ERROR: Each range specification must have 'key', 'start', and 'end' fields.")
+            if (
+                "key" not in range_spec
+                or "start" not in range_spec
+                or "end" not in range_spec
+            ):
+                raise ValueError(
+                    "ERROR: Each range specification must have 'key', 'start', and 'end' fields."
+                )
             ranges_dict[range_spec["key"]] = (range_spec["start"], range_spec["end"])
 
         keys = re.findall(r"{{([^{}]+)}}", prompt)
@@ -439,7 +498,12 @@ class RetrieveInformation(Tool):
 
         return ranges_dict
 
-    def _format_prompt(self, prompt: str, ranges_dict: dict[str, tuple[int, int]], state: dict[str, Any]) -> str:
+    def _format_prompt(
+        self,
+        prompt: str,
+        ranges_dict: dict[str, tuple[int, int]],
+        state: dict[str, Any],
+    ) -> str:
         """Substitute data storage content into prompt placeholders, applying character ranges."""
         keys = re.findall(r"{{([^{}]+)}}", prompt)
         formatted_data = {}
@@ -461,7 +525,9 @@ class RetrieveInformation(Tool):
                 f"ERROR: The key {str(e)} was not found in the data storage. Available keys are: {', '.join(state.keys())}"
             )
 
-    async def execute(self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger) -> ToolOutput:
+    async def execute(
+        self, args: dict[str, Any], state: dict[str, Any], logger: logging.Logger
+    ) -> ToolOutput:
         try:
             prompt: str = args["prompt"]
             input_character_ranges = args.get("input_character_ranges", [])
