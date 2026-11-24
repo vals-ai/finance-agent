@@ -21,11 +21,11 @@ VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_s
 TAVILY_USD_PER_CREDIT = Decimal("0.0043")
 
 
-def _report_tavily_cost(path: str, response: dict[str, Any], search_depth: str) -> None:
+def _report_tavily_cost(path: str, response: dict[str, Any]) -> None:
     """Append one Tavily charge line to the run's search cost file.
 
-    Uses the credits Tavily reports (`include_usage=True`); falls back to the documented
-    credits for the search depth when the response carries no usable count.
+    Uses the credits Tavily reports (`include_usage=True`); falls back to the one credit a
+    fast search costs when the response carries no usable count.
     """
     usage = response.get("usage")
     credits = usage.get("credits") if isinstance(usage, dict) else None
@@ -35,7 +35,7 @@ def _report_tavily_cost(path: str, response: dict[str, Any], search_depth: str) 
         or not math.isfinite(credits)
         or credits < 0
     ):
-        credits = 2 if search_depth == "advanced" else 1
+        credits = 1
     charge = {
         "provider": "tavily",
         "amount_usd": str(TAVILY_USD_PER_CREDIT * Decimal(str(credits))),
@@ -143,9 +143,8 @@ class TavilyWebSearch(Tool):
         cost_path = os.environ.get("VALKYRIE_SEARCH_COST_PATH")
         if cost_path:
             kwargs["include_usage"] = True
-        search_depth = "fast"
         response = await self.client.search(
-            search_depth=search_depth,
+            search_depth="fast",
             end_date=end_date,
             max_results=number_of_results,
             chunks_per_source=1,
@@ -153,7 +152,7 @@ class TavilyWebSearch(Tool):
             **kwargs,
         )
         if cost_path:
-            _report_tavily_cost(cost_path, response, search_depth)
+            _report_tavily_cost(cost_path, response)
 
         return response.get("results", [])
 

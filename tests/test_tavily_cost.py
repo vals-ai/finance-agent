@@ -66,3 +66,37 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
                             }
                         ],
                     )
+
+    async def test_each_search_appends_its_own_charge(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "search-cost.jsonl"
+            responses = [
+                {"request_id": "finance-1", "usage": {"credits": 1}, "results": []},
+                {"request_id": "finance-2", "usage": {"credits": 3}, "results": []},
+            ]
+            with (
+                patch.dict(os.environ, {"VALKYRIE_SEARCH_COST_PATH": str(path)}),
+                patch.object(
+                    AsyncTavilyClient, "search", new=AsyncMock(side_effect=responses)
+                ),
+            ):
+                for _ in responses:
+                    await TavilyWebSearch(tavily_api_key="test").execute(
+                        {"search_query": "example"}, {}, logging.getLogger(__name__)
+                    )
+
+            self.assertEqual(
+                [json.loads(line) for line in path.read_text().splitlines()],
+                [
+                    {
+                        "provider": "tavily",
+                        "amount_usd": "0.0043",
+                        "source_id": "finance-1",
+                    },
+                    {
+                        "provider": "tavily",
+                        "amount_usd": "0.0129",
+                        "source_id": "finance-2",
+                    },
+                ],
+            )
