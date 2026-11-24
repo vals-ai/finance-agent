@@ -13,9 +13,16 @@ from finance_agent.tools import TavilyWebSearch
 
 class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
     async def test_search_reports_cost_when_requested(self) -> None:
+        usage: object
         for usage, amount in [
             ({"credits": 5}, "0.0215"),
             ({}, "0.0043"),
+            ({"credits": True}, "0.0043"),
+            ({"credits": -2}, "0.0043"),
+            ({"credits": float("nan")}, "0.0043"),
+            ({"credits": float("inf")}, "0.0043"),
+            ({"credits": "3"}, "0.0043"),
+            ("not a dict", "0.0043"),
             ({"credits": 7}, None),
         ]:
             with (
