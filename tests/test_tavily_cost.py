@@ -100,3 +100,35 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
                     },
                 ],
             )
+
+    async def test_search_returns_results_when_cost_report_write_fails(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "search-cost.jsonl"
+            path.mkdir()
+            result = {
+                "url": "https://example.com",
+                "title": "Example",
+                "content": "Result",
+            }
+            response = {
+                "request_id": "finance-5",
+                "usage": {"credits": 1},
+                "results": [result],
+            }
+            with (
+                patch.dict(os.environ, {"VALKYRIE_SEARCH_COST_PATH": str(path)}),
+                patch.object(
+                    AsyncTavilyClient, "search", new=AsyncMock(return_value=response)
+                ),
+                self.assertLogs("finance_agent.tools", logging.WARNING) as logs,
+            ):
+                output = await TavilyWebSearch(tavily_api_key="test").execute(
+                    {"search_query": "example"}, {}, logging.getLogger(__name__)
+                )
+
+            self.assertEqual(json.loads(output.output), [result])
+            self.assertIsNone(output.error)
+            self.assertEqual(
+                [record.getMessage() for record in logs.records],
+                [f"Could not write search cost report {path}"],
+            )
