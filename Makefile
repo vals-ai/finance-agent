@@ -1,4 +1,4 @@
-.PHONY: help install style typecheck
+.PHONY: help install style typecheck test
 
 help:
 	@echo "Makefile for finance-agent"
@@ -6,6 +6,7 @@ help:
 	@echo "  make install          Install dependencies"
 	@echo "  make style            Lint & Format"
 	@echo "  make typecheck        Typecheck"
+	@echo "  make test             Run unit tests"
 
 PYTHON_VERSION ?= 3.11
 
@@ -29,3 +30,6 @@ style: format lint
 
 typecheck: venv_check
 	@uv run basedpyright
+
+test: venv_check
+	@uv run python -m unittest discover -s tests
