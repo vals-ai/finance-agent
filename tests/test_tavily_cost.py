@@ -49,7 +49,7 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
                 [
                     {
                         "provider": "tavily",
-                        "amount_usd": "0.0215",
+                        "credits": 5,
                         "source_id": "finance-5",
                     }
                 ],
@@ -82,7 +82,7 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
                     [
                         {
                             "provider": "tavily",
-                            "amount_usd": "0.0043",
+                            "credits": 1,
                             "source_id": "finance-5",
                         }
                     ],
@@ -101,7 +101,7 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(
                     [json.loads(line) for line in path.read_text().splitlines()],
-                    [{"provider": "tavily", "amount_usd": "0.0043"}],
+                    [{"provider": "tavily", "credits": 1}],
                 )
 
     async def test_search_without_cost_path_requests_no_usage(self) -> None:
@@ -139,12 +139,12 @@ class TavilyCostTest(unittest.IsolatedAsyncioTestCase):
                 [
                     {
                         "provider": "tavily",
-                        "amount_usd": "0.0043",
+                        "credits": 1,
                         "source_id": "finance-1",
                     },
                     {
                         "provider": "tavily",
-                        "amount_usd": "0.0129",
+                        "credits": 3,
                         "source_id": "finance-2",
                     },
                 ],

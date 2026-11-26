@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import re
-from decimal import Decimal
 from typing import Any
 
 import aiohttp
@@ -17,28 +16,21 @@ from .key_rotator import KeyRotator, get_rotator
 MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
 
-# Annual Scale contract price, the rate Bills uses (provider-costs daily_ingest/balances.toml);
-# finance-agent-v2 and model-library's web search use the same rate.
-TAVILY_USD_PER_CREDIT = Decimal("0.0043")
-
 
 def _report_tavily_cost(path: str, response: dict[str, Any]) -> None:
-    """Append one Tavily charge line to the run's search cost file.
+    """Append the Tavily credits a search used to the run's search cost file; Tracker prices them.
 
     Uses the credits Tavily reports (`include_usage=True`). When the response has no usable
-    count, it logs a warning and charges the one credit a fast search costs.
+    count, it logs a warning and records the one credit a fast search costs.
     """
     usage = response.get("usage")
     credits = usage.get("credits") if isinstance(usage, dict) else None
     if isinstance(credits, bool) or not isinstance(credits, int) or credits < 0:
         logging.getLogger(__name__).warning(
-            "Tavily response has no usable credit count (usage=%r); charging 1 credit", usage
+            "Tavily response has no usable credit count (usage=%r); recording 1 credit", usage
         )
         credits = 1
-    charge: dict[str, str] = {
-        "provider": "tavily",
-        "amount_usd": str(TAVILY_USD_PER_CREDIT * credits),
-    }
+    charge: dict[str, str | int] = {"provider": "tavily", "credits": credits}
     request_id = response.get("request_id")
     if isinstance(request_id, str) and request_id:
         charge["source_id"] = request_id
