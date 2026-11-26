@@ -17,6 +17,33 @@ MAX_END_DATE = "2025-04-07"
 VALID_TOOLS = ["web_search", "retrieve_information", "parse_html_page", "edgar_search"]
 
 
+def _report_tavily_cost(path: str, response: dict[str, Any]) -> None:
+    """Append the Tavily credits a search used to the run's search cost file; Tracker prices them.
+
+    Uses the credits Tavily reports (`include_usage=True`). When the response has no usable
+    count, it logs a warning and records the one credit a fast search costs.
+    """
+    usage = response.get("usage")
+    credits = usage.get("credits") if isinstance(usage, dict) else None
+    if isinstance(credits, bool) or not isinstance(credits, int) or credits < 0:
+        logging.getLogger(__name__).warning(
+            "Tavily response has no usable credit count (usage=%r); recording 1 credit", usage
+        )
+        credits = 1
+    charge: dict[str, str | int] = {"provider": "tavily", "credits": credits}
+    request_id = response.get("request_id")
+    if isinstance(request_id, str) and request_id:
+        charge["source_id"] = request_id
+    try:
+        with open(path, "a", encoding="utf-8") as report:
+            report.write(json.dumps(charge) + "\n")
+    except OSError:
+        # A lost cost line must not fail the agent's search; the warning makes the gap visible.
+        logging.getLogger(__name__).warning(
+            "Could not write search cost report %s", path, exc_info=True
+        )
+
+
 class SubmitFinalResult(Tool):
     name = "submit_final_result"
     description = (
@@ -88,7 +115,7 @@ class TavilyWebSearch(Tool):
     ) -> list[dict[str, Any]]:
         DATE_REGEX = r"^\d{4}-\d{2}-\d{2}$"
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
 
         if end_date:
             if not re.match(DATE_REGEX, end_date):
@@ -109,6 +136,9 @@ class TavilyWebSearch(Tool):
 
             kwargs["start_date"] = start_date
 
+        cost_path = os.environ.get("VALKYRIE_SEARCH_COST_PATH")
+        if cost_path:
+            kwargs["include_usage"] = True
         response = await self.client.search(
             search_depth="fast",
             end_date=end_date,
@@ -117,6 +147,8 @@ class TavilyWebSearch(Tool):
             query=search_query,
             **kwargs,
         )
+        if cost_path:
+            _report_tavily_cost(cost_path, response)
 
         return response.get("results", [])
 

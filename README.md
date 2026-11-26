@@ -50,6 +50,8 @@ You can create a Tavily API key [here](https://tavily.com/), and an SEC API key 
 
 The `.env` takes precedence over set environment variables.
 
+Optional: set `VALKYRIE_SEARCH_COST_PATH` to a file path to record Tavily spend. Each web search then asks Tavily for its credit count and appends one JSON line (`provider`, `credits`, `source_id`) to that file; Valkyrie prices the credits. The file is per process, so it holds the searches of every question that process runs.
+
 Finally, you should add the "Test Suite IDs" to suites.json. These should have generally been provided to you via email, but you can also find them in the platform, by navigating to the "Test Suites" page, clicking the relevant test suite, and looking on the right sidebar under "Test Suite ID".
 
 ## Running the benchmark
